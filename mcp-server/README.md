@@ -1,8 +1,8 @@
 # dev-machine MCP server
 
-Cloudflare Worker remote MCP server with OAuth endpoints.
+Cloudflare Worker remote MCP server with OAuth and encrypted KV config.
 
-## Local Setup
+## Setup
 
 ```bash
 npm install
@@ -11,19 +11,24 @@ npx wrangler kv namespace create OAUTH_KV
 
 Copy the returned KV namespace id into `wrangler.jsonc`.
 
-## Secrets
+Set the only bootstrap secrets:
 
 ```bash
 npx wrangler secret put MCP_ADMIN_TOKEN
-npx wrangler secret put CLOUDFLARE_ACCOUNT_ID
-npx wrangler secret put CLOUDFLARE_SECRETS_STORE_ID
-npx wrangler secret put CLOUDFLARE_API_TOKEN
+npx wrangler secret put CONFIG_ENCRYPTION_KEY
 ```
 
-`MCP_ADMIN_TOKEN` protects the OAuth consent page and `/admin` in this first version.
-`CLOUDFLARE_API_TOKEN` needs permission to write Cloudflare Secrets Store entries.
+Generate `CONFIG_ENCRYPTION_KEY` with:
 
-After deploy, open `/admin` and save:
+```bash
+openssl rand -base64 32
+```
+
+## Configure Provider Credentials
+
+Run or deploy the Worker, then open `/admin`.
+
+Save:
 
 ```text
 DIGITALOCEAN_ACCESS_TOKEN
@@ -33,7 +38,7 @@ TAILSCALE_CLIENT_SECRET
 DEV_MACHINE_SSH_PUBLIC_KEY
 ```
 
-Cloudflare does not let secret values be read back through the API after saving. Bind the saved Secrets Store entries to this Worker before MCP tools need to use the values.
+These values are encrypted with `CONFIG_ENCRYPTION_KEY` and stored in KV.
 
 ## Run
 
@@ -45,24 +50,4 @@ npm run dev
 
 ```bash
 npm run deploy
-```
-
-MCP endpoint:
-
-```text
-/mcp
-```
-
-OAuth endpoints:
-
-```text
-/authorize
-/token
-/register
-```
-
-Admin UI:
-
-```text
-/admin
 ```

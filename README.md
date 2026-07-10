@@ -1,35 +1,22 @@
 # dev-machine
 
-Remote dev machines controlled by an authenticated MCP server.
+Remote Linux dev machines controlled by an authenticated Cloudflare Worker MCP server.
 
-## How It Works
-
-```text
-Codex
-  -> Cloudflare Worker MCP server
-    -> DigitalOcean API
-    -> Tailscale API
-    -> cloud-init
-
-New dev machine
-  -> clones this repo
-  -> checks out the selected ref
-  -> runs scripts/bootstrap.sh
-  -> joins Tailscale
-```
-
-The dev machine never gets DigitalOcean or Tailscale OAuth secrets. It only gets short-lived bootstrap data.
-
-## Repo Layout
+## Flow
 
 ```text
-mcp-server/   Cloudflare Worker remote MCP server
-cloud-init/   template rendered by the MCP server
-scripts/      machine bootstrap scripts
-docs/         design notes
+Codex -> Worker MCP server -> DigitalOcean + Tailscale
+
+New machine:
+  clones this repo
+  checks out the selected ref
+  runs scripts/bootstrap.sh
+  joins Tailscale
 ```
 
-## Start The MCP Server
+Provider credentials are saved from `/admin` into encrypted KV. The Worker needs one root secret: `CONFIG_ENCRYPTION_KEY`.
+
+## Setup
 
 ```bash
 cd mcp-server
@@ -37,18 +24,18 @@ npm install
 npx wrangler kv namespace create OAUTH_KV
 ```
 
-Add the returned KV namespace id to `mcp-server/wrangler.jsonc`, then set secrets:
+Put the returned KV id in `mcp-server/wrangler.jsonc`, then set:
 
 ```bash
 npx wrangler secret put MCP_ADMIN_TOKEN
-npx wrangler secret put CLOUDFLARE_ACCOUNT_ID
-npx wrangler secret put CLOUDFLARE_SECRETS_STORE_ID
-npx wrangler secret put CLOUDFLARE_API_TOKEN
+npx wrangler secret put CONFIG_ENCRYPTION_KEY
 ```
 
-`CLOUDFLARE_API_TOKEN` needs permission to write Cloudflare Secrets Store entries. After deploy, open `/admin` to save DigitalOcean, Tailscale, and SSH secrets into Secrets Store.
+Generate the encryption key with:
 
-When the MCP tools need to use those values, bind the created Secrets Store entries to the Worker in `wrangler.jsonc` or the Cloudflare dashboard.
+```bash
+openssl rand -base64 32
+```
 
 Run locally:
 
@@ -62,37 +49,41 @@ Deploy:
 npm run deploy
 ```
 
-The MCP endpoint is:
+Open `/admin` and save:
 
 ```text
-https://<worker-name>.<account>.workers.dev/mcp
+DIGITALOCEAN_ACCESS_TOKEN
+TAILSCALE_TAILNET
+TAILSCALE_CLIENT_ID
+TAILSCALE_CLIENT_SECRET
+DEV_MACHINE_SSH_PUBLIC_KEY
 ```
 
-OAuth endpoints are:
+## Endpoints
 
 ```text
+/mcp
 /authorize
 /token
 /register
-```
-
-Admin UI:
-
-```text
 /admin
 ```
 
-## Current Tools
+## Tools
 
 ```text
 devmachine_status
+devmachine_list
+devmachine_create
+devmachine_start
+devmachine_stop
+devmachine_power_off
+devmachine_suspend
+devmachine_destroy
 devmachine_connection_info
 devmachine_render_cloud_init
-devmachine_create
 ```
 
-`devmachine_create` currently returns a creation plan. The next step is wiring it to DigitalOcean and Tailscale.
-
-## Public Repo Rules
+## Safety
 
 Never commit real tokens, auth keys, private SSH keys, or `.env` files.

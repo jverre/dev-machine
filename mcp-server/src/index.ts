@@ -3,8 +3,18 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createMcpHandler, getMcpAuthContext } from "agents/mcp";
 import { z } from "zod";
 import { authHandler } from "./auth";
-import { getConfig, getSecretStatus } from "./config";
+import { getConfig } from "./config";
 import { renderCloudInit } from "./cloud-init";
+import {
+  createDroplet,
+  destroyDroplet,
+  dropletAction,
+  findDroplet,
+  listDroplets,
+  waitForAction
+} from "./digitalocean";
+import { getSecretConfig, getSecretStatus } from "./secret-config";
+import { createTailscaleAuthKey } from "./tailscale";
 
 function createServer(env: Env) {
   const server = new McpServer({
@@ -24,8 +34,21 @@ function createServer(env: Env) {
         authenticated: Boolean(auth),
         auth: auth?.props ?? null,
         config: getConfig(env),
-        secrets: getSecretStatus(env)
+        secrets: await getSecretStatus(env)
       });
+    }
+  );
+
+  server.registerTool(
+    "devmachine_list",
+    {
+      description: "List DigitalOcean Droplets managed by dev-machine.",
+      inputSchema: {}
+    },
+    async () => {
+      const config = getConfig(env);
+      const secrets = await getSecretConfig(env);
+      return jsonToolResult(await listDroplets(secrets, config.tag));
     }
   );
 
@@ -67,7 +90,10 @@ function createServer(env: Env) {
       const config = getConfig(env);
       const rendered = renderCloudInit({
         devUser: user ?? config.defaultUser,
-        sshPublicKey: sshPublicKey ?? config.sshPublicKey ?? "",
+        sshPublicKey:
+          sshPublicKey ??
+          (await getSecretConfig(env)).DEV_MACHINE_SSH_PUBLIC_KEY ??
+          "",
         tailscaleAuthKey,
         tailscaleHostname: name ?? config.defaultName,
         repo: repo ?? config.repo,
@@ -83,35 +109,167 @@ function createServer(env: Env) {
   server.registerTool(
     "devmachine_create",
     {
-      description: "Plan creation of a dev machine. DigitalOcean/Tailscale execution is the next implementation step.",
+      description: "Create a DigitalOcean dev machine and bootstrap it into Tailscale.",
       inputSchema: {
         name: z.string().optional(),
         region: z.string().optional(),
         size: z.string().optional(),
         image: z.string().optional(),
-        ref: z.string().optional()
+        ref: z.string().optional(),
+        user: z.string().optional()
       }
     },
-    async ({ name, region, size, image, ref }) => {
+    async ({ name, region, size, image, ref, user }) => {
       const config = getConfig(env);
+      const secrets = await getSecretConfig(env);
+      const machineName = name ?? config.defaultName;
+      const existing = await findDroplet(secrets, machineName, config.tag);
+      if (existing) {
+        return jsonToolResult({ status: "already_exists", droplet: existing });
+      }
+
+      const tailscaleKey = await createTailscaleAuthKey(
+        secrets,
+        config.tag,
+        `dev-machine ${machineName}`
+      );
+      const userData = renderCloudInit({
+        devUser: user ?? config.defaultUser,
+        sshPublicKey: secrets.DEV_MACHINE_SSH_PUBLIC_KEY ?? "",
+        tailscaleAuthKey: tailscaleKey,
+        tailscaleHostname: machineName,
+        repo: config.repo,
+        ref: ref ?? config.ref
+      });
+      const droplet = await createDroplet(secrets, {
+        name: machineName,
+        region: region ?? config.region,
+        size: size ?? config.size,
+        image: image ?? config.image,
+        tags: [config.tag],
+        userData
+      });
       return jsonToolResult({
-        status: "planned",
-        next: "Implement DigitalOcean droplet creation and Tailscale auth-key minting in this tool.",
-        machine: {
-          name: name ?? config.defaultName,
-          region: region ?? config.region,
-          size: size ?? config.size,
-          image: image ?? config.image,
-          repo: config.repo,
-          ref: ref ?? config.ref,
-          tag: config.tag
-        },
-        secrets: getSecretStatus(env)
+        status: "creating",
+        droplet,
+        connection: connectionInfo(machineName, user ?? config.defaultUser)
       });
     }
   );
 
+  server.registerTool(
+    "devmachine_start",
+    {
+      description: "Power on a managed DigitalOcean dev machine.",
+      inputSchema: { name: z.string().optional() }
+    },
+    async ({ name }) => {
+      return jsonToolResult(await runDropletAction(env, name, "power_on"));
+    }
+  );
+
+  server.registerTool(
+    "devmachine_stop",
+    {
+      description: "Gracefully shut down a managed DigitalOcean dev machine.",
+      inputSchema: { name: z.string().optional() }
+    },
+    async ({ name }) => {
+      return jsonToolResult(await runDropletAction(env, name, "shutdown"));
+    }
+  );
+
+  server.registerTool(
+    "devmachine_power_off",
+    {
+      description: "Hard power off a managed DigitalOcean dev machine.",
+      inputSchema: { name: z.string().optional() }
+    },
+    async ({ name }) => {
+      return jsonToolResult(await runDropletAction(env, name, "power_off"));
+    }
+  );
+
+  server.registerTool(
+    "devmachine_suspend",
+    {
+      description: "Snapshot a dev machine, then destroy the Droplet. Requires confirm='snapshot and destroy'.",
+      inputSchema: {
+        name: z.string().optional(),
+        confirm: z.string()
+      }
+    },
+    async ({ name, confirm }) => {
+      if (confirm !== "snapshot and destroy") {
+        throw new Error("Set confirm to 'snapshot and destroy'.");
+      }
+      const config = getConfig(env);
+      const secrets = await getSecretConfig(env);
+      const machineName = name ?? config.defaultName;
+      const droplet = await requireDroplet(secrets, machineName, config.tag);
+      const snapshotName = `${machineName}-${new Date().toISOString().replaceAll(":", "-")}`;
+      const action = await dropletAction(secrets, droplet.id, "snapshot", snapshotName);
+      await waitForAction(secrets, action.action.id);
+      await destroyDroplet(secrets, droplet.id);
+      return jsonToolResult({ status: "snapshotted_and_destroyed", snapshotName, action });
+    }
+  );
+
+  server.registerTool(
+    "devmachine_destroy",
+    {
+      description: "Destroy a managed DigitalOcean dev machine. Requires confirm='destroy'.",
+      inputSchema: {
+        name: z.string().optional(),
+        confirm: z.string()
+      }
+    },
+    async ({ name, confirm }) => {
+      if (confirm !== "destroy") {
+        throw new Error("Set confirm to 'destroy'.");
+      }
+      const config = getConfig(env);
+      const secrets = await getSecretConfig(env);
+      const machineName = name ?? config.defaultName;
+      const droplet = await requireDroplet(secrets, machineName, config.tag);
+      await destroyDroplet(secrets, droplet.id);
+      return jsonToolResult({ status: "destroyed", droplet });
+    }
+  );
+
   return server;
+}
+
+async function runDropletAction(
+  env: Env,
+  name: string | undefined,
+  action: "power_on" | "shutdown" | "power_off"
+) {
+  const config = getConfig(env);
+  const secrets = await getSecretConfig(env);
+  const machineName = name ?? config.defaultName;
+  const droplet = await requireDroplet(secrets, machineName, config.tag);
+  return dropletAction(secrets, droplet.id, action);
+}
+
+async function requireDroplet(
+  secrets: Awaited<ReturnType<typeof getSecretConfig>>,
+  name: string,
+  tag: string
+) {
+  const droplet = await findDroplet(secrets, name, tag);
+  if (!droplet) {
+    throw new Error(`No managed Droplet found named ${name}.`);
+  }
+  return droplet;
+}
+
+function connectionInfo(name: string, user: string) {
+  return {
+    ssh: `ssh ${user}@${name}`,
+    tmux: "tmux new -A -s work",
+    vscode: `code --remote ssh-remote+${name} /home/${user}/work`
+  };
 }
 
 const apiHandler = {

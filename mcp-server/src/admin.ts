@@ -1,11 +1,10 @@
 import {
   deleteSecret,
-  hasSecretsStoreConfig,
-  listSecrets,
+  listConfiguredSecrets,
   MANAGED_SECRET_NAMES,
   putSecret,
   type ManagedSecretName
-} from "./cloudflare-secrets";
+} from "./secret-config";
 
 export async function handleAdmin(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
@@ -60,9 +59,10 @@ async function renderAdmin(
   message?: string,
   status = 200
 ): Promise<Response> {
-  const configured = hasSecretsStoreConfig(env);
-  const existing = configured ? await listSecrets(env).catch(() => []) : [];
-  const existingNames = new Set(existing.map((secret) => secret.name));
+  const configured = Boolean(env.CONFIG_ENCRYPTION_KEY);
+  const existingNames = configured
+    ? await listConfiguredSecrets(env).catch(() => new Set<ManagedSecretName>())
+    : new Set<ManagedSecretName>();
 
   const rows = MANAGED_SECRET_NAMES.map((name) => {
     const present = existingNames.has(name);
@@ -103,7 +103,7 @@ async function renderAdmin(
     ${
       configured
         ? ""
-        : `<p class="notice warn">Cloudflare Secrets Store API config is incomplete. Set <code>CLOUDFLARE_ACCOUNT_ID</code>, <code>CLOUDFLARE_SECRETS_STORE_ID</code>, and <code>CLOUDFLARE_API_TOKEN</code>.</p>`
+        : `<p class="notice warn">Encrypted config is disabled. Set <code>CONFIG_ENCRYPTION_KEY</code> as a Worker secret.</p>`
     }
     <form method="post" action="/admin">
       <label>
