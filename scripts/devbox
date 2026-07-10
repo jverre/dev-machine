@@ -3,10 +3,14 @@ set -euo pipefail
 
 command="${1:-help}"
 
+die() {
+  printf 'error: %s\n' "$*" >&2
+  exit 1
+}
+
 require_doctl() {
   if ! command -v doctl >/dev/null 2>&1; then
-    printf 'doctl is required. Install it and run: doctl auth init\n' >&2
-    exit 1
+    die "doctl is required. Install it and run: doctl auth init"
   fi
 }
 
@@ -17,12 +21,16 @@ droplet_id() {
   fi
 
   if [[ -z "${DIGITALOCEAN_DROPLET_NAME:-}" ]]; then
-    printf 'Set DIGITALOCEAN_DROPLET_ID or DIGITALOCEAN_DROPLET_NAME.\n' >&2
-    exit 1
+    die "set DIGITALOCEAN_DROPLET_ID or DIGITALOCEAN_DROPLET_NAME"
   fi
 
-  doctl compute droplet list --format ID,Name --no-header |
+  local id
+  id="$(doctl compute droplet list --format ID,Name --no-header |
     awk -v name="$DIGITALOCEAN_DROPLET_NAME" '$2 == name { print $1; exit }'
+  )"
+
+  [[ -n "$id" ]] || die "no Droplet found named ${DIGITALOCEAN_DROPLET_NAME}"
+  printf '%s\n' "$id"
 }
 
 case "$command" in
@@ -58,6 +66,7 @@ Environment:
   DIGITALOCEAN_DROPLET_NAME    fallback lookup by name
 
 Note:
+  This is a local convenience wrapper while the MCP server is being built.
   DigitalOcean powered-off droplets usually still reserve billable resources.
   For true cost savings, add snapshot + destroy + recreate workflow later.
 EOF

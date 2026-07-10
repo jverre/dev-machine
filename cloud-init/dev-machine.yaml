@@ -3,12 +3,12 @@ package_update: true
 package_upgrade: false
 
 users:
-  - name: jacques
+  - name: __DEV_USER__
     groups: sudo
     shell: /bin/bash
     sudo: ALL=(ALL) NOPASSWD:ALL
     ssh_authorized_keys:
-      - YOUR_SSH_PUBLIC_KEY
+      - __SSH_PUBLIC_KEY__
 
 packages:
   - ca-certificates
@@ -21,10 +21,10 @@ write_files:
     content: |
       #!/usr/bin/env bash
       set -euo pipefail
-      export DEV_USER=jacques
-      export TAILSCALE_AUTH_KEY="MCP_GENERATED_TAILSCALE_AUTH_KEY"
-      export TAILSCALE_HOSTNAME="devbox"
-      git clone https://github.com/YOUR_GITHUB_USER/dev-machine.git /opt/dev-machine
+      export DEV_USER="__DEV_USER__"
+      export TAILSCALE_AUTH_KEY="__TAILSCALE_AUTH_KEY__"
+      export TAILSCALE_HOSTNAME="__TAILSCALE_HOSTNAME__"
+      git clone "__DEV_MACHINE_REPO__" /opt/dev-machine
       /opt/dev-machine/scripts/bootstrap.sh
 
 runcmd:

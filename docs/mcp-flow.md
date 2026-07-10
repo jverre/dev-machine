@@ -69,6 +69,7 @@ The generated auth key should be:
    - GitHub repo URL
    - generated Tailscale auth key
    - desired hostname
+   - dev user
 3. Create Droplet with the rendered cloud-init user data.
 4. Poll DigitalOcean until the Droplet is active.
 5. Poll Tailscale until the hostname appears.

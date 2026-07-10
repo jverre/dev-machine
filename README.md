@@ -39,11 +39,13 @@ cd dev-machine
 
 ## First Boot With Cloud-Init
 
-Use `cloud-init/dev-machine.yaml` as a template when creating a VM. In the normal flow, the MCP server renders this file from trusted runtime values:
+Use `cloud-init/dev-machine.yaml` as a template when creating a VM. In the normal flow, the MCP server renders the `__TOKEN__` placeholders from trusted runtime values:
 
-- `YOUR_SSH_PUBLIC_KEY`
-- `YOUR_GITHUB_USER`
-- `MCP_GENERATED_TAILSCALE_AUTH_KEY`
+- `__DEV_USER__`
+- `__SSH_PUBLIC_KEY__`
+- `__TAILSCALE_AUTH_KEY__`
+- `__TAILSCALE_HOSTNAME__`
+- `__DEV_MACHINE_REPO__`
 
 The auth key should be generated just-in-time by the MCP server through the Tailscale API, then injected into DigitalOcean cloud-init. Do not commit real auth keys.
 
