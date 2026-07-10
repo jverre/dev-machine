@@ -8,7 +8,8 @@ The goal is a durable dev box that feels like a Mac mini you can reach from anyw
 - VS Code Remote SSH / Cursor / terminal-friendly workflow
 - Docker and devcontainers for project isolation
 - repeatable bootstrap scripts
-- no secrets committed to git
+- MCP-managed lifecycle for create, start, stop, snapshot, and destroy
+- no machine secrets committed to git
 
 ## Target Host
 
@@ -38,13 +39,29 @@ cd dev-machine
 
 ## First Boot With Cloud-Init
 
-Use `cloud-init/dev-machine.yaml` as a template when creating a VM. Replace:
+Use `cloud-init/dev-machine.yaml` as a template when creating a VM. In the normal flow, the MCP server renders this file from trusted runtime values:
 
 - `YOUR_SSH_PUBLIC_KEY`
 - `YOUR_GITHUB_USER`
-- `YOUR_TAILSCALE_AUTH_KEY`
+- `MCP_GENERATED_TAILSCALE_AUTH_KEY`
 
-Prefer a short-lived, tagged Tailscale auth key. Do not commit real auth keys.
+The auth key should be generated just-in-time by the MCP server through the Tailscale API, then injected into DigitalOcean cloud-init. Do not commit real auth keys.
+
+## MCP-First Flow
+
+The intended control plane is an MCP server with access to DigitalOcean and Tailscale APIs.
+
+```text
+Codex / MCP client
+  -> dev-machine MCP server
+    -> create short-lived Tailscale auth key
+    -> render cloud-init
+    -> create DigitalOcean Droplet
+    -> wait for Tailscale SSH
+    -> return connection details
+```
+
+See `docs/mcp-flow.md` for the orchestration design.
 
 ## Daily Workflow
 

@@ -22,7 +22,7 @@ write_files:
       #!/usr/bin/env bash
       set -euo pipefail
       export DEV_USER=jacques
-      export TAILSCALE_AUTH_KEY="YOUR_TAILSCALE_AUTH_KEY"
+      export TAILSCALE_AUTH_KEY="MCP_GENERATED_TAILSCALE_AUTH_KEY"
       export TAILSCALE_HOSTNAME="devbox"
       git clone https://github.com/YOUR_GITHUB_USER/dev-machine.git /opt/dev-machine
       /opt/dev-machine/scripts/bootstrap.sh
