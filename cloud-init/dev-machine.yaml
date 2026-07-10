@@ -25,6 +25,8 @@ write_files:
       export TAILSCALE_AUTH_KEY="__TAILSCALE_AUTH_KEY__"
       export TAILSCALE_HOSTNAME="__TAILSCALE_HOSTNAME__"
       git clone "__DEV_MACHINE_REPO__" /opt/dev-machine
+      cd /opt/dev-machine
+      git checkout "__DEV_MACHINE_REF__"
       /opt/dev-machine/scripts/bootstrap.sh
 
 runcmd:

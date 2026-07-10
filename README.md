@@ -1,112 +1,140 @@
 # dev-machine
 
-Personal, public-safe setup for a remote Linux development machine.
+Public-safe setup for personal remote Linux development machines.
 
-The goal is a durable dev box that feels like a Mac mini you can reach from anywhere:
+The repo is the source of truth for what a dev machine should become. An MCP server owns orchestration: it creates the VM, generates short-lived Tailscale bootstrap credentials, renders cloud-init, and waits until the machine is reachable.
 
-- private access through Tailscale
-- VS Code Remote SSH / Cursor / terminal-friendly workflow
-- Docker and devcontainers for project isolation
-- repeatable bootstrap scripts
-- MCP-managed lifecycle for create, start, stop, snapshot, and destroy
-- no machine secrets committed to git
+## Recommended Flow
 
-## Target Host
+```text
+Codex / MCP client
+  -> dev-machine MCP server
+    -> resolve this repo ref to a commit SHA
+    -> create a short-lived Tailscale auth key
+    -> render cloud-init/dev-machine.yaml
+    -> create a DigitalOcean Droplet
+    -> wait for Tailscale SSH
+    -> return connection details
 
-Recommended baseline:
-
-- Ubuntu 24.04 LTS or Debian 12
-- 4-8 vCPU
-- 16-32 GB RAM
-- 100+ GB NVMe
-- Tailscale installed during first boot
-
-## Quick Start
-
-On a fresh Linux host:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/YOUR_GITHUB_USER/dev-machine/main/scripts/bootstrap.sh | bash
+Droplet first boot
+  -> create dev user
+  -> clone this repo into /opt/dev-machine
+  -> checkout the MCP-selected ref
+  -> run scripts/bootstrap.sh
 ```
 
-Or, safer while iterating:
+The important bit: each machine clones this repo, but the MCP server pins the exact ref used for that machine. Use `main` while iterating; resolve and store a commit SHA for reproducible machines.
 
-```bash
-git clone https://github.com/YOUR_GITHUB_USER/dev-machine.git
-cd dev-machine
-./scripts/bootstrap.sh
+## What The Machine Gets
+
+The machine receives only bootstrap material:
+
+- a repo URL
+- a repo ref or commit SHA
+- a short-lived Tailscale auth key
+- a fallback SSH public key
+- machine/user names
+
+It does not receive DigitalOcean credentials, Tailscale OAuth credentials, or other provider secrets.
+
+## MCP Runtime Config
+
+See `.env.example` for the MCP server runtime variables:
+
+```env
+DIGITALOCEAN_ACCESS_TOKEN=
+TAILSCALE_TAILNET=
+TAILSCALE_CLIENT_ID=
+TAILSCALE_CLIENT_SECRET=
+
+DEV_MACHINE_DEFAULT_REGION=lon1
+DEV_MACHINE_DEFAULT_SIZE=s-4vcpu-16gb
+DEV_MACHINE_DEFAULT_IMAGE=ubuntu-24-04-x64
+DEV_MACHINE_DEFAULT_NAME=devbox
+DEV_MACHINE_DEFAULT_USER=jacques
+DEV_MACHINE_TAG=dev-machine
+DEV_MACHINE_GITHUB_REPO=https://github.com/YOUR_GITHUB_USER/dev-machine.git
+DEV_MACHINE_GITHUB_REF=main
+DEV_MACHINE_SSH_PUBLIC_KEY=
 ```
 
-## First Boot With Cloud-Init
+Those values belong to the MCP server process or its secret store. Do not commit real credentials.
 
-Use `cloud-init/dev-machine.yaml` as a template when creating a VM. In the normal flow, the MCP server renders the `__TOKEN__` placeholders from trusted runtime values:
+## Cloud-Init Template
+
+`cloud-init/dev-machine.yaml` is rendered by the MCP server. It contains these placeholders:
 
 - `__DEV_USER__`
 - `__SSH_PUBLIC_KEY__`
 - `__TAILSCALE_AUTH_KEY__`
 - `__TAILSCALE_HOSTNAME__`
 - `__DEV_MACHINE_REPO__`
+- `__DEV_MACHINE_REF__`
 
-The auth key should be generated just-in-time by the MCP server through the Tailscale API, then injected into DigitalOcean cloud-init. Do not commit real auth keys.
+The rendered machine bootstraps itself by cloning this repo:
 
-## MCP-First Flow
-
-The intended control plane is an MCP server with access to DigitalOcean and Tailscale APIs.
-
-```text
-Codex / MCP client
-  -> dev-machine MCP server
-    -> create short-lived Tailscale auth key
-    -> render cloud-init
-    -> create DigitalOcean Droplet
-    -> wait for Tailscale SSH
-    -> return connection details
+```bash
+git clone "$DEV_MACHINE_REPO" /opt/dev-machine
+cd /opt/dev-machine
+git checkout "$DEV_MACHINE_REF"
+/opt/dev-machine/scripts/bootstrap.sh
 ```
 
-See `docs/mcp-flow.md` for the orchestration design.
+## Bootstrap Script
 
-## Daily Workflow
+`scripts/bootstrap.sh` runs on the remote machine. It installs:
 
-From your laptop:
+- base CLI tools
+- Docker
+- Tailscale
+- `tmux`, shells, `direnv`, `mise`
+
+If `TAILSCALE_AUTH_KEY` is present, it joins the tailnet with Tailscale SSH enabled.
+
+## Daily Use
+
+Once the MCP server creates a machine:
 
 ```bash
 ssh devbox
-```
-
-Then keep long-running work in `tmux`:
-
-```bash
 tmux new -A -s work
 ```
 
-For VS Code:
+For VS Code / Cursor-style remote work:
 
 ```bash
 code --remote ssh-remote+devbox /home/jacques/work
 ```
 
-## Local SSH Config
+## Lifecycle Semantics
 
-Example `~/.ssh/config` entry:
+The MCP server should expose a small tool surface:
 
-```sshconfig
-Host devbox
-  HostName devbox
-  User jacques
-  ForwardAgent yes
-  ServerAliveInterval 30
-  ServerAliveCountMax 3
+```text
+devmachine_list
+devmachine_create
+devmachine_status
+devmachine_start
+devmachine_stop
+devmachine_suspend
+devmachine_destroy
+devmachine_connection_info
 ```
 
-If using Tailscale MagicDNS, `HostName devbox` can be the Tailscale machine name.
+Suggested meanings:
+
+- `stop`: clean shutdown or power-off; fast but may still reserve billable Droplet resources
+- `suspend`: snapshot and destroy; slower but cost-aware
+- `start`: power on an existing Droplet, or recreate from the latest snapshot
+- `destroy`: delete the Droplet and optionally delete retained snapshots
 
 ## Repo Layout
 
 ```text
-cloud-init/   first-boot VM templates
-config/       public-safe config examples
+cloud-init/   MCP-rendered first-boot template
+config/       public-safe local config examples
 docs/         notes and operating guides
-scripts/      bootstrap and lifecycle helpers
+scripts/      machine bootstrap and temporary local helpers
 ```
 
 ## Public Repo Rules
@@ -114,9 +142,7 @@ scripts/      bootstrap and lifecycle helpers
 Never commit:
 
 - Tailscale auth keys
+- Tailscale OAuth secrets
 - cloud provider API tokens
 - private SSH keys
-- machine-specific passwords
 - `.env` files with secrets
-
-Use `.env.example` files and local shell exports instead.

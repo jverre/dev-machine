@@ -34,10 +34,11 @@ The dev machines should not need long-lived secrets. For each machine creation, 
 
 1. request a short-lived Tailscale API access token through OAuth client credentials
 2. create a short-lived, tagged Tailscale auth key
-3. render cloud-init with that one-time auth key
-4. create the DigitalOcean Droplet
-5. wait for the node to appear in Tailscale
-6. return the Tailscale DNS name and SSH command
+3. resolve the requested `dev-machine` repo ref to a commit SHA
+4. render cloud-init with the one-time auth key, repo URL, and resolved ref
+5. create the DigitalOcean Droplet
+6. wait for the node to appear in Tailscale
+7. return the Tailscale DNS name and SSH command
 
 This means the machine gets only the temporary bootstrap credential it needs to join the tailnet.
 
@@ -64,20 +65,31 @@ The generated auth key should be:
 ### Create
 
 1. Generate a Tailscale auth key.
-2. Render `cloud-init/dev-machine.yaml` with:
+2. Resolve the requested repo ref, such as `main`, to a commit SHA.
+3. Render `cloud-init/dev-machine.yaml` with:
    - SSH public key
    - GitHub repo URL
+   - GitHub repo ref or resolved commit SHA
    - generated Tailscale auth key
    - desired hostname
    - dev user
-3. Create Droplet with the rendered cloud-init user data.
-4. Poll DigitalOcean until the Droplet is active.
-5. Poll Tailscale until the hostname appears.
-6. Return:
+4. Create Droplet with the rendered cloud-init user data.
+5. Poll DigitalOcean until the Droplet is active.
+6. Poll Tailscale until the hostname appears.
+7. Return:
 
 ```text
 ssh jacques@devbox
 code --remote ssh-remote+devbox /home/jacques/work
+```
+
+The Droplet bootstraps itself by cloning the repo and checking out the MCP-selected ref:
+
+```bash
+git clone "$DEV_MACHINE_REPO" /opt/dev-machine
+cd /opt/dev-machine
+git checkout "$DEV_MACHINE_REF"
+/opt/dev-machine/scripts/bootstrap.sh
 ```
 
 ### Stop
