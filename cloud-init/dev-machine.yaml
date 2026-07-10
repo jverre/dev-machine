@@ -1,0 +1,31 @@
+#cloud-config
+package_update: true
+package_upgrade: false
+
+users:
+  - name: jacques
+    groups: sudo
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - YOUR_SSH_PUBLIC_KEY
+
+packages:
+  - ca-certificates
+  - curl
+  - git
+
+write_files:
+  - path: /root/bootstrap-dev-machine.sh
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      export DEV_USER=jacques
+      export TAILSCALE_AUTH_KEY="YOUR_TAILSCALE_AUTH_KEY"
+      export TAILSCALE_HOSTNAME="devbox"
+      git clone https://github.com/YOUR_GITHUB_USER/dev-machine.git /opt/dev-machine
+      /opt/dev-machine/scripts/bootstrap.sh
+
+runcmd:
+  - [bash, /root/bootstrap-dev-machine.sh]
