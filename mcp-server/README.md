@@ -15,14 +15,25 @@ Copy the returned KV namespace id into `wrangler.jsonc`.
 
 ```bash
 npx wrangler secret put MCP_ADMIN_TOKEN
-npx wrangler secret put DIGITALOCEAN_ACCESS_TOKEN
-npx wrangler secret put TAILSCALE_TAILNET
-npx wrangler secret put TAILSCALE_CLIENT_ID
-npx wrangler secret put TAILSCALE_CLIENT_SECRET
-npx wrangler secret put DEV_MACHINE_SSH_PUBLIC_KEY
+npx wrangler secret put CLOUDFLARE_ACCOUNT_ID
+npx wrangler secret put CLOUDFLARE_SECRETS_STORE_ID
+npx wrangler secret put CLOUDFLARE_API_TOKEN
 ```
 
-`MCP_ADMIN_TOKEN` protects the OAuth consent page in this first version.
+`MCP_ADMIN_TOKEN` protects the OAuth consent page and `/admin` in this first version.
+`CLOUDFLARE_API_TOKEN` needs permission to write Cloudflare Secrets Store entries.
+
+After deploy, open `/admin` and save:
+
+```text
+DIGITALOCEAN_ACCESS_TOKEN
+TAILSCALE_TAILNET
+TAILSCALE_CLIENT_ID
+TAILSCALE_CLIENT_SECRET
+DEV_MACHINE_SSH_PUBLIC_KEY
+```
+
+Cloudflare does not let secret values be read back through the API after saving. Bind the saved Secrets Store entries to this Worker before MCP tools need to use the values.
 
 ## Run
 
@@ -48,4 +59,10 @@ OAuth endpoints:
 /authorize
 /token
 /register
+```
+
+Admin UI:
+
+```text
+/admin
 ```

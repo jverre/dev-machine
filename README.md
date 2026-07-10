@@ -41,12 +41,14 @@ Add the returned KV namespace id to `mcp-server/wrangler.jsonc`, then set secret
 
 ```bash
 npx wrangler secret put MCP_ADMIN_TOKEN
-npx wrangler secret put DIGITALOCEAN_ACCESS_TOKEN
-npx wrangler secret put TAILSCALE_TAILNET
-npx wrangler secret put TAILSCALE_CLIENT_ID
-npx wrangler secret put TAILSCALE_CLIENT_SECRET
-npx wrangler secret put DEV_MACHINE_SSH_PUBLIC_KEY
+npx wrangler secret put CLOUDFLARE_ACCOUNT_ID
+npx wrangler secret put CLOUDFLARE_SECRETS_STORE_ID
+npx wrangler secret put CLOUDFLARE_API_TOKEN
 ```
+
+`CLOUDFLARE_API_TOKEN` needs permission to write Cloudflare Secrets Store entries. After deploy, open `/admin` to save DigitalOcean, Tailscale, and SSH secrets into Secrets Store.
+
+When the MCP tools need to use those values, bind the created Secrets Store entries to the Worker in `wrangler.jsonc` or the Cloudflare dashboard.
 
 Run locally:
 
@@ -72,6 +74,12 @@ OAuth endpoints are:
 /authorize
 /token
 /register
+```
+
+Admin UI:
+
+```text
+/admin
 ```
 
 ## Current Tools

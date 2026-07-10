@@ -13,6 +13,16 @@
   //     "id": "replace-with-kv-namespace-id"
   //   }
   // ],
+  // After creating secrets from /admin, bind them to the Worker with
+  // Secrets Store bindings before code needs to read their values:
+  //
+  // "secrets_store_secrets": [
+  //   {
+  //     "binding": "DIGITALOCEAN_ACCESS_TOKEN_SECRET",
+  //     "store_id": "replace-with-store-id",
+  //     "secret_name": "DIGITALOCEAN_ACCESS_TOKEN"
+  //   }
+  // ],
   "vars": {
     "DEV_MACHINE_DEFAULT_REGION": "lon1",
     "DEV_MACHINE_DEFAULT_SIZE": "s-4vcpu-16gb",

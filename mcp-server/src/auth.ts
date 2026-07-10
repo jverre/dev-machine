@@ -1,4 +1,5 @@
 import type { AuthRequest, ClientInfo } from "@cloudflare/workers-oauth-provider";
+import { handleAdmin } from "./admin";
 
 interface OAuthEnv extends Env {
   OAUTH_PROVIDER: {
@@ -22,6 +23,10 @@ export const authHandler = {
       return new Response("dev-machine MCP server", {
         headers: { "content-type": "text/plain; charset=utf-8" }
       });
+    }
+
+    if (url.pathname === "/admin") {
+      return handleAdmin(request, env);
     }
 
     if (url.pathname !== "/authorize") {
