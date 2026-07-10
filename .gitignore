@@ -22,3 +22,6 @@ override.tf.json
 # Editor
 .idea/
 .vscode/settings.json
+
+# JavaScript
+node_modules/
