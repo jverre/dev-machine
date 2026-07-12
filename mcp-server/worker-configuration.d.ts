@@ -16,4 +16,5 @@ interface Env {
   COOKIE_ENCRYPTION_KEY?: string;
   MCP_ADMIN_TOKEN?: string;
   CONFIG_ENCRYPTION_KEY?: string;
+  ADMIN_EMAIL?: string;
 }

@@ -1,4 +1,5 @@
 import type { AuthRequest, ClientInfo } from "@cloudflare/workers-oauth-provider";
+import { adminLabel, isAdminRequest } from "./access";
 import { handleAdmin } from "./admin";
 
 interface OAuthEnv extends Env {
@@ -37,8 +38,10 @@ export const authHandler = {
     const authRequest = await oauthEnv.OAUTH_PROVIDER.parseAuthRequest(request);
     const client = await oauthEnv.OAUTH_PROVIDER.lookupClient(authRequest.clientId);
 
+    const isAccessAdmin = isAdminRequest(request, env);
+
     if (request.method === "GET") {
-      return renderConsent(request.url, client, authRequest.scope ?? []);
+      return renderConsent(request.url, client, authRequest.scope ?? [], isAccessAdmin);
     }
 
     if (request.method !== "POST") {
@@ -47,7 +50,7 @@ export const authHandler = {
 
     const form = await request.formData();
     const token = String(form.get("admin_token") ?? "");
-    if (!env.MCP_ADMIN_TOKEN || token !== env.MCP_ADMIN_TOKEN) {
+    if (!isAccessAdmin && (!env.MCP_ADMIN_TOKEN || token !== env.MCP_ADMIN_TOKEN)) {
       return new Response("Invalid admin token", { status: 403 });
     }
 
@@ -64,7 +67,7 @@ export const authHandler = {
       },
       scope: grantedScopes,
       props: {
-        userId: "owner",
+        userId: adminLabel(request),
         role: "admin",
         clientId: authRequest.clientId
       }
@@ -74,7 +77,12 @@ export const authHandler = {
   }
 };
 
-function renderConsent(action: string, client: ClientInfo, scopes: string[]): Response {
+function renderConsent(
+  action: string,
+  client: ClientInfo,
+  scopes: string[],
+  isAccessAdmin: boolean
+): Response {
   const clientName = escapeHtml(client.clientName ?? client.clientId);
   const scopeText = escapeHtml(scopes.length ? scopes.join(" ") : "devmachine.read devmachine.write");
   const html = `<!doctype html>
@@ -96,10 +104,14 @@ function renderConsent(action: string, client: ClientInfo, scopes: string[]): Re
     <p>Client: <strong>${clientName}</strong></p>
     <p>Scopes: <code>${scopeText}</code></p>
     <form method="post" action="${escapeHtml(action)}">
-      <label>
-        Admin token
-        <input name="admin_token" type="password" autocomplete="one-time-code" required />
-      </label>
+      ${
+        isAccessAdmin
+          ? `<p>Authenticated by Cloudflare Access.</p>`
+          : `<label>
+              Admin token
+              <input name="admin_token" type="password" autocomplete="one-time-code" required />
+            </label>`
+      }
       <button type="submit">Authorize</button>
     </form>
   </body>

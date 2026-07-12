@@ -13,14 +13,24 @@ npx wrangler kv namespace create OAUTH_KV
 Add the KV id to `wrangler.jsonc`, then:
 
 ```bash
-npx wrangler secret put MCP_ADMIN_TOKEN
 npx wrangler secret put CONFIG_ENCRYPTION_KEY
+npx wrangler secret put ADMIN_EMAIL
 ```
 
 Generate `CONFIG_ENCRYPTION_KEY` with:
 
 ```bash
 openssl rand -base64 32
+```
+
+Use `jverre@gmail.com` for `ADMIN_EMAIL`.
+
+Recommended: protect the Worker with Cloudflare Access and allow only `jverre@gmail.com`. The Worker trusts the `cf-access-authenticated-user-email` header set by Cloudflare Access.
+
+Optional local fallback:
+
+```bash
+npx wrangler secret put MCP_ADMIN_TOKEN
 ```
 
 Run locally:
@@ -34,6 +44,8 @@ Open:
 ```text
 http://127.0.0.1:8787/admin
 ```
+
+If running locally without Cloudflare Access, enter `MCP_ADMIN_TOKEN`.
 
 Save:
 

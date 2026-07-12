@@ -5,6 +5,7 @@ import {
   putSecret,
   type ManagedSecretName
 } from "./secret-config";
+import { adminLabel, isAdminRequest } from "./access";
 
 export async function handleAdmin(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
@@ -14,7 +15,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
   }
 
   if (request.method === "GET") {
-    return renderAdmin(env);
+    return renderAdmin(request, env);
   }
 
   if (request.method !== "POST") {
@@ -23,8 +24,9 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
 
   const form = await request.formData();
   const adminToken = String(form.get("admin_token") ?? "");
-  if (!env.MCP_ADMIN_TOKEN || adminToken !== env.MCP_ADMIN_TOKEN) {
-    return renderAdmin(env, "Invalid admin token.", 403);
+  const isAccessAdmin = isAdminRequest(request, env);
+  if (!isAccessAdmin && (!env.MCP_ADMIN_TOKEN || adminToken !== env.MCP_ADMIN_TOKEN)) {
+    return renderAdmin(request, env, "Invalid admin token.", 403);
   }
 
   const deleteName = form.get("delete_name");
@@ -34,7 +36,7 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
     if (action === "delete") {
       const name = validateSecretName(String(deleteName ?? ""));
       await deleteSecret(env, name);
-      return renderAdmin(env, `${name} deleted.`);
+      return renderAdmin(request, env, `${name} deleted.`);
     }
 
     for (const name of MANAGED_SECRET_NAMES) {
@@ -44,9 +46,10 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
       }
     }
 
-    return renderAdmin(env, "Secrets saved. Empty fields were left unchanged.");
+    return renderAdmin(request, env, "Secrets saved. Empty fields were left unchanged.");
   } catch (error) {
     return renderAdmin(
+      request,
       env,
       error instanceof Error ? error.message : "Failed to update secrets.",
       500
@@ -55,11 +58,13 @@ export async function handleAdmin(request: Request, env: Env): Promise<Response>
 }
 
 async function renderAdmin(
+  request: Request,
   env: Env,
   message?: string,
   status = 200
 ): Promise<Response> {
   const configured = Boolean(env.CONFIG_ENCRYPTION_KEY);
+  const isAccessAdmin = isAdminRequest(request, env);
   const existingNames = configured
     ? await listConfiguredSecrets(env).catch(() => new Set<ManagedSecretName>())
     : new Set<ManagedSecretName>();
@@ -99,6 +104,7 @@ async function renderAdmin(
   </head>
   <body>
     <h1>dev-machine admin</h1>
+    <p>Admin: <code>${escapeHtml(adminLabel(request))}</code></p>
     ${message ? `<p class="notice">${escapeHtml(message)}</p>` : ""}
     ${
       configured
@@ -106,10 +112,14 @@ async function renderAdmin(
         : `<p class="notice warn">Encrypted config is disabled. Set <code>CONFIG_ENCRYPTION_KEY</code> as a Worker secret.</p>`
     }
     <form method="post" action="/admin">
-      <label>
-        Admin token
-        <input name="admin_token" type="password" autocomplete="one-time-code" required />
-      </label>
+      ${
+        isAccessAdmin
+          ? `<p class="notice">Authenticated by Cloudflare Access.</p>`
+          : `<label>
+              Admin token
+              <input name="admin_token" type="password" autocomplete="one-time-code" required />
+            </label>`
+      }
       <table>
         <thead>
           <tr>

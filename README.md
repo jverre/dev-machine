@@ -51,11 +51,21 @@ openssl rand -base64 32
 Set the Worker secrets:
 
 ```bash
-npx wrangler secret put MCP_ADMIN_TOKEN
 npx wrangler secret put CONFIG_ENCRYPTION_KEY
+npx wrangler secret put ADMIN_EMAIL
 ```
 
-`MCP_ADMIN_TOKEN` is the password for `/admin` and OAuth approval. `CONFIG_ENCRYPTION_KEY` encrypts provider credentials before storing them in KV.
+Use `jverre@gmail.com` for `ADMIN_EMAIL`.
+
+`CONFIG_ENCRYPTION_KEY` encrypts provider credentials before storing them in KV.
+
+Recommended: put the Worker behind Cloudflare Access and allow only `jverre@gmail.com`. When Cloudflare Access sends that email to the Worker, `/admin` and OAuth approval do not need an admin token.
+
+Optional fallback:
+
+```bash
+npx wrangler secret put MCP_ADMIN_TOKEN
+```
 
 ## 4. Run Locally
 
@@ -69,7 +79,7 @@ Open:
 http://127.0.0.1:8787/admin
 ```
 
-Enter `MCP_ADMIN_TOKEN`, then save:
+If running locally without Cloudflare Access, set and enter `MCP_ADMIN_TOKEN`. Then save:
 
 ```text
 DIGITALOCEAN_ACCESS_TOKEN
@@ -110,7 +120,7 @@ The OAuth endpoints are:
 /register
 ```
 
-When prompted to authorize, use `MCP_ADMIN_TOKEN`.
+When prompted to authorize, Cloudflare Access should authenticate `jverre@gmail.com`. If not using Access, use `MCP_ADMIN_TOKEN`.
 
 ## 7. Create A Dev Machine
 
