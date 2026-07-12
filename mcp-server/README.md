@@ -1,17 +1,16 @@
 # dev-machine MCP server
 
-Cloudflare Worker remote MCP server with OAuth and encrypted KV config.
+Cloudflare Worker MCP server with OAuth and encrypted KV config.
 
-## Setup
+## Runbook
 
 ```bash
 npm install
+npx wrangler login
 npx wrangler kv namespace create OAUTH_KV
 ```
 
-Copy the returned KV namespace id into `wrangler.jsonc`.
-
-Set the only bootstrap secrets:
+Add the KV id to `wrangler.jsonc`, then:
 
 ```bash
 npx wrangler secret put MCP_ADMIN_TOKEN
@@ -24,9 +23,17 @@ Generate `CONFIG_ENCRYPTION_KEY` with:
 openssl rand -base64 32
 ```
 
-## Configure Provider Credentials
+Run locally:
 
-Run or deploy the Worker, then open `/admin`.
+```bash
+npm run dev
+```
+
+Open:
+
+```text
+http://127.0.0.1:8787/admin
+```
 
 Save:
 
@@ -38,16 +45,20 @@ TAILSCALE_CLIENT_SECRET
 DEV_MACHINE_SSH_PUBLIC_KEY
 ```
 
-These values are encrypted with `CONFIG_ENCRYPTION_KEY` and stored in KV.
-
-## Run
-
-```bash
-npm run dev
-```
-
-## Deploy
+Deploy:
 
 ```bash
 npm run deploy
+```
+
+MCP endpoint:
+
+```text
+/mcp
+```
+
+Admin UI:
+
+```text
+/admin
 ```

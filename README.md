@@ -1,55 +1,75 @@
 # dev-machine
 
-Remote Linux dev machines controlled by an authenticated Cloudflare Worker MCP server.
+Authenticated remote MCP server for creating Linux dev machines on DigitalOcean and joining them to Tailscale.
 
-## Flow
+## What You Need
 
-```text
-Codex -> Worker MCP server -> DigitalOcean + Tailscale
+- Cloudflare account with Workers enabled
+- `wrangler` logged in:
+  ```bash
+  npx wrangler login
+  ```
+- DigitalOcean API token
+- Tailscale OAuth client with permission to create auth keys
+- SSH public key:
+  ```bash
+  cat ~/.ssh/id_ed25519.pub
+  ```
 
-New machine:
-  clones this repo
-  checks out the selected ref
-  runs scripts/bootstrap.sh
-  joins Tailscale
-```
-
-Provider credentials are saved from `/admin` into encrypted KV. The Worker needs one root secret: `CONFIG_ENCRYPTION_KEY`.
-
-## Setup
+## 1. Install
 
 ```bash
-cd mcp-server
+cd /Users/jacquesverre/Documents/Personal/dev-machine/mcp-server
 npm install
+```
+
+## 2. Create KV
+
+```bash
 npx wrangler kv namespace create OAUTH_KV
 ```
 
-Put the returned KV id in `mcp-server/wrangler.jsonc`, then set:
+Copy the returned `id` into `mcp-server/wrangler.jsonc`:
+
+```jsonc
+"kv_namespaces": [
+  {
+    "binding": "OAUTH_KV",
+    "id": "paste-kv-id-here"
+  }
+]
+```
+
+## 3. Set Bootstrap Secrets
+
+Generate an encryption key:
+
+```bash
+openssl rand -base64 32
+```
+
+Set the Worker secrets:
 
 ```bash
 npx wrangler secret put MCP_ADMIN_TOKEN
 npx wrangler secret put CONFIG_ENCRYPTION_KEY
 ```
 
-Generate the encryption key with:
+`MCP_ADMIN_TOKEN` is the password for `/admin` and OAuth approval. `CONFIG_ENCRYPTION_KEY` encrypts provider credentials before storing them in KV.
 
-```bash
-openssl rand -base64 32
-```
-
-Run locally:
+## 4. Run Locally
 
 ```bash
 npm run dev
 ```
 
-Deploy:
+Open:
 
-```bash
-npm run deploy
+```text
+http://127.0.0.1:8787/admin
 ```
 
-Open `/admin` and save:
+Enter `MCP_ADMIN_TOKEN`, then save:
 
 ```text
 DIGITALOCEAN_ACCESS_TOKEN
@@ -59,14 +79,63 @@ TAILSCALE_CLIENT_SECRET
 DEV_MACHINE_SSH_PUBLIC_KEY
 ```
 
-## Endpoints
+## 5. Deploy
+
+```bash
+npm run deploy
+```
+
+Your endpoints will be:
 
 ```text
-/mcp
+https://dev-machine-mcp.<your-subdomain>.workers.dev/admin
+https://dev-machine-mcp.<your-subdomain>.workers.dev/mcp
+```
+
+Open `/admin` on the deployed Worker and save the provider credentials there too. Local KV and deployed KV are separate unless configured otherwise.
+
+## 6. Connect An MCP Client
+
+Use the deployed MCP endpoint:
+
+```text
+https://dev-machine-mcp.<your-subdomain>.workers.dev/mcp
+```
+
+The OAuth endpoints are:
+
+```text
 /authorize
 /token
 /register
-/admin
+```
+
+When prompted to authorize, use `MCP_ADMIN_TOKEN`.
+
+## 7. Create A Dev Machine
+
+Call:
+
+```text
+devmachine_create
+```
+
+Useful arguments:
+
+```json
+{
+  "name": "devbox",
+  "region": "lon1",
+  "size": "s-4vcpu-16gb",
+  "image": "ubuntu-24-04-x64",
+  "ref": "main"
+}
+```
+
+Then connect through Tailscale:
+
+```bash
+ssh jacques@devbox
 ```
 
 ## Tools
@@ -84,6 +153,20 @@ devmachine_connection_info
 devmachine_render_cloud_init
 ```
 
-## Safety
+## Troubleshooting
+
+Check configured secrets:
+
+```text
+devmachine_status
+```
+
+If `/admin` says `CONFIG_ENCRYPTION_KEY` is missing, run:
+
+```bash
+npx wrangler secret put CONFIG_ENCRYPTION_KEY
+```
+
+If OAuth state/token storage fails, confirm `OAUTH_KV` is bound in `wrangler.jsonc`.
 
 Never commit real tokens, auth keys, private SSH keys, or `.env` files.
