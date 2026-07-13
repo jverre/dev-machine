@@ -37,6 +37,8 @@ export interface CreateDropletInput {
 export interface DigitalOceanApi {
   listDropletsByTag(tag: string): Promise<DigitalOceanDroplet[]>;
   createDroplet(input: CreateDropletInput): Promise<DigitalOceanDroplet>;
+  startDroplet(id: number): Promise<DigitalOceanAction>;
+  shutdownDroplet(id: number): Promise<DigitalOceanAction>;
   resizeDroplet(id: number, size: string): Promise<DigitalOceanAction>;
   deleteDroplet(id: number): Promise<void>;
 }
@@ -82,22 +84,37 @@ export class DigitalOceanClient implements DigitalOceanApi {
     id: number,
     size: string
   ): Promise<DigitalOceanAction> {
-    const response = await this.request<{ action: DigitalOceanAction }>(
-      `droplets/${id}/actions`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          type: "resize",
-          size,
-          disk: false
-        })
-      }
-    );
-    return response.action;
+    return this.initiateDropletAction(id, {
+      type: "resize",
+      size,
+      disk: false
+    });
+  }
+
+  async startDroplet(id: number): Promise<DigitalOceanAction> {
+    return this.initiateDropletAction(id, { type: "power_on" });
+  }
+
+  async shutdownDroplet(id: number): Promise<DigitalOceanAction> {
+    return this.initiateDropletAction(id, { type: "shutdown" });
   }
 
   async deleteDroplet(id: number): Promise<void> {
     await this.request<void>(`droplets/${id}`, { method: "DELETE" });
+  }
+
+  private async initiateDropletAction(
+    id: number,
+    body: Record<string, unknown>
+  ): Promise<DigitalOceanAction> {
+    const response = await this.request<{ action: DigitalOceanAction }>(
+      `droplets/${id}/actions`,
+      {
+        method: "POST",
+        body: JSON.stringify(body)
+      }
+    );
+    return response.action;
   }
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {

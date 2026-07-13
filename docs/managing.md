@@ -18,6 +18,14 @@ Call `devmachine_create` with an optional allowed size:
 
 When `size` is omitted, the configured default is used. If the machine already exists, it is returned unchanged.
 
+## Start
+
+Call `devmachine_start` without arguments. If the machine is off, the tool submits a DigitalOcean `power_on` action. If it is already active or still being created, no change is made.
+
+## Stop
+
+Call `devmachine_stop` without arguments. If the machine is active, the tool requests a graceful DigitalOcean `shutdown`. It does not fall back to a hard power-off. If the machine is already off, no change is made.
+
 ## Resize
 
 Call `devmachine_resize` with the new allowed size:
@@ -28,7 +36,7 @@ Call `devmachine_resize` with the new allowed size:
 }
 ```
 
-The operation resizes CPU and RAM only. The disk is never expanded, preserving the ability to resize down later. DigitalOcean powers the Droplet off during this operation; starting it again is not implemented yet.
+The operation resizes CPU and RAM only. The disk is never expanded, preserving the ability to resize down later. DigitalOcean powers the Droplet off during this operation; call `devmachine_start` after the resize completes.
 
 ## Delete
 

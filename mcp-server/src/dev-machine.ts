@@ -41,6 +41,12 @@ export interface MachineResizeResult {
   action?: DigitalOceanAction;
 }
 
+export interface MachinePowerResult {
+  changed: boolean;
+  machine: Machine;
+  action?: DigitalOceanAction;
+}
+
 export interface MachineDeleteResult {
   changed: boolean;
   deletedMachine?: Machine;
@@ -107,6 +113,38 @@ export class DevMachineService {
     return { changed: true, machine, requestedSize: size, action };
   }
 
+  async start(): Promise<MachinePowerResult> {
+    const droplet = await this.requireDroplet();
+    const machine = toMachine(droplet);
+    if (droplet.status === "active" || droplet.status === "new") {
+      return { changed: false, machine };
+    }
+    if (droplet.status !== "off") {
+      throw new DevMachineError(
+        `Cannot start the dev machine while its status is ${droplet.status}.`
+      );
+    }
+
+    const action = await this.api.startDroplet(droplet.id);
+    return { changed: true, machine, action };
+  }
+
+  async stop(): Promise<MachinePowerResult> {
+    const droplet = await this.requireDroplet();
+    const machine = toMachine(droplet);
+    if (droplet.status === "off") {
+      return { changed: false, machine };
+    }
+    if (droplet.status !== "active") {
+      throw new DevMachineError(
+        `Cannot stop the dev machine while its status is ${droplet.status}.`
+      );
+    }
+
+    const action = await this.api.shutdownDroplet(droplet.id);
+    return { changed: true, machine, action };
+  }
+
   async delete(confirm: boolean): Promise<MachineDeleteResult> {
     if (!confirm) {
       throw new DevMachineError("Deletion must be explicitly confirmed.");
@@ -126,7 +164,7 @@ export class DevMachineService {
     const droplet = await this.resolveDroplet();
     if (!droplet) {
       throw new DevMachineError(
-        "The dev machine does not exist. Create it before resizing it."
+        "The dev machine does not exist. Create it first."
       );
     }
     return droplet;

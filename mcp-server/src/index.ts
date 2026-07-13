@@ -44,7 +44,7 @@ function createServer(identity: AccessIdentity, env: Env) {
   );
   const server = new McpServer({
     name: "dev-machine",
-    version: "0.2.0"
+    version: "0.3.0"
   });
 
   server.registerTool(
@@ -113,6 +113,48 @@ function createServer(identity: AccessIdentity, env: Env) {
       }
     },
     async ({ size }) => runTool("create", () => service.create(size))
+  );
+
+  server.registerTool(
+    "devmachine_start",
+    {
+      title: "Start dev machine",
+      description:
+        "Power on the managed dev machine, or return it unchanged if it is already active or starting.",
+      outputSchema: z.object({
+        changed: z.boolean(),
+        machine: MachineSchema,
+        action: ActionSchema.optional()
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true
+      }
+    },
+    async () => runTool("start", () => service.start())
+  );
+
+  server.registerTool(
+    "devmachine_stop",
+    {
+      title: "Stop dev machine",
+      description:
+        "Request a graceful shutdown of the managed dev machine, or return it unchanged if it is already off.",
+      outputSchema: z.object({
+        changed: z.boolean(),
+        machine: MachineSchema,
+        action: ActionSchema.optional()
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: true
+      }
+    },
+    async () => runTool("stop", () => service.stop())
   );
 
   server.registerTool(

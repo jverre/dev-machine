@@ -7,6 +7,8 @@ The server manages one DigitalOcean dev machine and exposes these tools:
 - `devmachine_ping`: verifies the MCP connection and returns the authenticated email address.
 - `devmachine_status`: returns the machine's current state and public IP address.
 - `devmachine_create`: creates the machine if it does not already exist.
+- `devmachine_start`: powers on the machine.
+- `devmachine_stop`: requests a graceful shutdown.
 - `devmachine_resize`: changes its CPU and RAM without expanding its disk.
 - `devmachine_delete`: permanently deletes the machine.
 
