@@ -4,12 +4,18 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-07-10",
   "compatibility_flags": ["nodejs_compat"],
+  "routes": [
+    {
+      "pattern": "mcp.jacquesverre.com",
+      "custom_domain": true
+    }
+  ],
   "observability": {
     "enabled": true
   },
   "vars": {
-    "TEAM_DOMAIN": "https://<TEAM_NAME>.cloudflareaccess.com",
-    "POLICY_AUD": "<ACCESS_APPLICATION_AUD>",
+    "TEAM_DOMAIN": "https://lucky-truth-10f2.cloudflareaccess.com",
+    "POLICY_AUD": "11f4dab8584f87607673628c34551808d3c21bc8c1bfe11d8acb0676074c2fb3",
     "ALLOWED_EMAIL": "jverre@gmail.com"
   }
 }

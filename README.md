@@ -18,27 +18,27 @@ npm install
 In Cloudflare Zero Trust:
 
 1. Go to **Access controls** > **AI controls** > **MCP servers**.
-2. Add an MCP server for `https://dev-machine-mcp.jverre.workers.dev/mcp`.
-3. Use `dev-machine-mcp.jverre.workers.dev` as its public hostname.
+2. Add an MCP server for `https://mcp.jacquesverre.com/mcp`.
+3. Use `mcp.jacquesverre.com` as its public hostname.
 4. Add an **Allow** policy whose email is exactly `jverre@gmail.com`.
-5. Turn on **Managed OAuth** under **Advanced settings**.
-6. Copy the application's **AUD** tag.
+5. Select **One-time PIN** as the only identity provider.
+6. Turn on **Managed OAuth** under **Advanced settings**.
+7. Enable dynamic client registration, localhost clients, and loopback clients.
+8. Copy the application's **AUD** tag into `POLICY_AUD` in `mcp-server/wrangler.jsonc`.
 
 Cloudflare Access now handles OAuth discovery, browser login, token issuance, and policy enforcement.
 
 ## 3. Configure JWT validation
 
-Edit `mcp-server/wrangler.jsonc`:
+The repository is configured for this deployment:
 
 ```jsonc
 "vars": {
-  "TEAM_DOMAIN": "https://<your-team-name>.cloudflareaccess.com",
-  "POLICY_AUD": "<the-AUD-tag-from-the-Access-application>",
+  "TEAM_DOMAIN": "https://lucky-truth-10f2.cloudflareaccess.com",
+  "POLICY_AUD": "11f4dab8584f87607673628c34551808d3c21bc8c1bfe11d8acb0676074c2fb3",
   "ALLOWED_EMAIL": "jverre@gmail.com"
 }
 ```
-
-Find the team domain under **Zero Trust** > **Settings** > **Team name and domain**.
 
 These values are identifiers, not secrets. The Worker validates every Access JWT's signature, issuer, audience, and email.
 
@@ -53,7 +53,7 @@ npm run deploy
 The MCP endpoint is:
 
 ```text
-https://dev-machine-mcp.jverre.workers.dev/mcp
+https://mcp.jacquesverre.com/mcp
 ```
 
 ## 5. Test OAuth and MCP
@@ -62,7 +62,7 @@ https://dev-machine-mcp.jverre.workers.dev/mcp
 npx @modelcontextprotocol/inspector@latest
 ```
 
-Open the Inspector URL printed by the command, select **Streamable HTTP**, enter the MCP endpoint, and connect. Cloudflare Access will open the OAuth login flow. Sign in as `jverre@gmail.com`, list the tools, and call `devmachine_ping`.
+Open the Inspector URL printed by the command, select **Streamable HTTP**, enter the MCP endpoint, and connect. Cloudflare Access will ask for `jverre@gmail.com` and email a single-use PIN. Enter the PIN, list the tools, and call `devmachine_ping`.
 
 Expected result:
 
