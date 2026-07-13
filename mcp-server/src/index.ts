@@ -87,7 +87,7 @@ function createServer(identity: AccessIdentity, env: Env) {
         openWorldHint: true
       }
     },
-    async () => runTool(() => service.status())
+    async () => runTool("status", () => service.status())
   );
 
   server.registerTool(
@@ -112,7 +112,7 @@ function createServer(identity: AccessIdentity, env: Env) {
         openWorldHint: true
       }
     },
-    async ({ size }) => runTool(() => service.create(size))
+    async ({ size }) => runTool("create", () => service.create(size))
   );
 
   server.registerTool(
@@ -137,7 +137,7 @@ function createServer(identity: AccessIdentity, env: Env) {
         openWorldHint: true
       }
     },
-    async ({ size }) => runTool(() => service.resize(size))
+    async ({ size }) => runTool("resize", () => service.resize(size))
   );
 
   server.registerTool(
@@ -162,24 +162,20 @@ function createServer(identity: AccessIdentity, env: Env) {
         openWorldHint: true
       }
     },
-    async ({ confirm }) => runTool(() => service.delete(confirm))
+    async ({ confirm }) => runTool("delete", () => service.delete(confirm))
   );
 
   return server;
 }
 
 async function runTool<T extends object>(
+  operationName: string,
   operation: () => Promise<T>
 ): Promise<CallToolResult> {
   try {
     return toolResult(await operation());
   } catch (error) {
-    if (
-      !(error instanceof DevMachineError) &&
-      !(error instanceof DigitalOceanApiError)
-    ) {
-      console.error("Unexpected dev machine operation error", error);
-    }
+    logToolError(operationName, error);
     return {
       isError: true,
       content: [
@@ -202,6 +198,30 @@ function toolResult<T extends object>(value: T): CallToolResult {
       }
     ]
   };
+}
+
+function logToolError(operation: string, error: unknown): void {
+  if (error instanceof DigitalOceanApiError) {
+    console.error("DigitalOcean operation failed", {
+      operation,
+      status: error.status,
+      message: error.message
+    });
+    return;
+  }
+
+  if (error instanceof DevMachineError) {
+    console.error("Dev machine operation rejected", {
+      operation,
+      message: error.message
+    });
+    return;
+  }
+
+  console.error("Unexpected dev machine operation error", {
+    operation,
+    error
+  });
 }
 
 function safeErrorMessage(error: unknown): string {
