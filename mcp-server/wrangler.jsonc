@@ -1,35 +1,15 @@
 {
-	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "dev-machine-mcp",
-	"main": "src/index.ts",
-	"compatibility_date": "2026-07-10",
-	"compatibility_flags": [
-		"nodejs_compat"
-	],
-	// Create this with:
-	//   npx wrangler kv namespace create OAUTH_KV
-	// Then uncomment and fill in the id before deploying.
-	// "kv_namespaces": [
-	//   {
-	//     "binding": "OAUTH_KV",
-	//     "id": "replace-with-kv-namespace-id"
-	//   }
-	// ],
-	"vars": {
-		"DEV_MACHINE_DEFAULT_REGION": "lon1",
-		"DEV_MACHINE_DEFAULT_SIZE": "s-4vcpu-16gb",
-		"DEV_MACHINE_DEFAULT_IMAGE": "ubuntu-24-04-x64",
-		"DEV_MACHINE_DEFAULT_NAME": "devbox",
-		"DEV_MACHINE_DEFAULT_USER": "jacques",
-		"DEV_MACHINE_TAG": "dev-machine",
-		"DEV_MACHINE_GITHUB_REPO": "https://github.com/jverre/dev-machine.git",
-		"DEV_MACHINE_GITHUB_REF": "main"
-	},
-	"kv_namespaces": [
-		{
-			"binding": "OAUTH_KV",
-			"id": "a0e4b2650650473bb03f70e7d944c1e7",
-			"remote": true
-		}
-	]
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "dev-machine-mcp",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-10",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "TEAM_DOMAIN": "https://<TEAM_NAME>.cloudflareaccess.com",
+    "POLICY_AUD": "<ACCESS_APPLICATION_AUD>",
+    "ALLOWED_EMAIL": "jverre@gmail.com"
+  }
 }

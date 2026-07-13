@@ -1,20 +1,5 @@
 interface Env {
-  OAUTH_KV: KVNamespace;
-  OAUTH_PROVIDER: unknown;
-
-  DEV_MACHINE_DEFAULT_REGION: string;
-  DEV_MACHINE_DEFAULT_SIZE: string;
-  DEV_MACHINE_DEFAULT_IMAGE: string;
-  DEV_MACHINE_DEFAULT_NAME: string;
-  DEV_MACHINE_DEFAULT_USER: string;
-  DEV_MACHINE_TAG: string;
-  DEV_MACHINE_GITHUB_REPO: string;
-  DEV_MACHINE_GITHUB_REF: string;
-
-  GITHUB_CLIENT_ID?: string;
-  GITHUB_CLIENT_SECRET?: string;
-  COOKIE_ENCRYPTION_KEY?: string;
-  MCP_ADMIN_TOKEN?: string;
-  CONFIG_ENCRYPTION_KEY?: string;
-  ADMIN_EMAIL?: string;
+  TEAM_DOMAIN: string;
+  POLICY_AUD: string;
+  ALLOWED_EMAIL: string;
 }

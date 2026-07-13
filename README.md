@@ -1,182 +1,76 @@
 # dev-machine
 
-Authenticated remote MCP server for creating Linux dev machines on DigitalOcean and joining them to Tailscale.
+A minimal remote MCP server on Cloudflare Workers, protected by Cloudflare Access Managed OAuth.
 
-## What You Need
+It currently exposes one tool, `devmachine_ping`, so the MCP transport and OAuth flow can be verified before any machine-management code is added.
 
-- Cloudflare account with Workers enabled
-- `wrangler` logged in:
-  ```bash
-  npx wrangler login
-  ```
-- DigitalOcean API token
-- Tailscale OAuth client with permission to create auth keys
-- SSH public key:
-  ```bash
-  cat ~/.ssh/id_ed25519.pub
-  ```
+There is no admin UI, custom OAuth server, KV namespace, or Worker secret.
 
 ## 1. Install
 
 ```bash
-cd /Users/jacquesverre/Documents/Personal/dev-machine/mcp-server
+cd mcp-server
 npm install
 ```
 
-## 2. Create KV
+## 2. Create the Access application
 
-```bash
-npx wrangler kv namespace create OAUTH_KV
-```
+In Cloudflare Zero Trust:
 
-Copy the returned `id` into `mcp-server/wrangler.jsonc`:
+1. Go to **Access controls** > **AI controls** > **MCP servers**.
+2. Add an MCP server for `https://dev-machine-mcp.jverre.workers.dev/mcp`.
+3. Use `dev-machine-mcp.jverre.workers.dev` as its public hostname.
+4. Add an **Allow** policy whose email is exactly `jverre@gmail.com`.
+5. Turn on **Managed OAuth** under **Advanced settings**.
+6. Copy the application's **AUD** tag.
+
+Cloudflare Access now handles OAuth discovery, browser login, token issuance, and policy enforcement.
+
+## 3. Configure JWT validation
+
+Edit `mcp-server/wrangler.jsonc`:
 
 ```jsonc
-"kv_namespaces": [
-  {
-    "binding": "OAUTH_KV",
-    "id": "paste-kv-id-here"
-  }
-]
-```
-
-## 3. Set Bootstrap Secrets
-
-Generate an encryption key:
-
-```bash
-openssl rand -base64 32
-```
-
-Set the Worker secrets:
-
-```bash
-npx wrangler secret put CONFIG_ENCRYPTION_KEY
-npx wrangler secret put ADMIN_EMAIL
-```
-
-Use `jverre@gmail.com` for `ADMIN_EMAIL`.
-
-`CONFIG_ENCRYPTION_KEY` encrypts provider credentials before storing them in KV.
-
-Recommended: put the Worker behind Cloudflare Access and allow only `jverre@gmail.com`. When Cloudflare Access sends that email to the Worker, `/admin` and OAuth approval do not need an admin token.
-
-Optional fallback:
-
-```bash
-npx wrangler secret put MCP_ADMIN_TOKEN
-```
-
-## 4. Run Locally
-
-```bash
-npm run dev
-```
-
-Open:
-
-```text
-http://127.0.0.1:8787/admin
-```
-
-If running locally without Cloudflare Access, set and enter `MCP_ADMIN_TOKEN`. Then save:
-
-```text
-DIGITALOCEAN_ACCESS_TOKEN
-TAILSCALE_TAILNET
-TAILSCALE_CLIENT_ID
-TAILSCALE_CLIENT_SECRET
-DEV_MACHINE_SSH_PUBLIC_KEY
-```
-
-## 5. Deploy
-
-```bash
-npm run deploy
-```
-
-Your endpoints will be:
-
-```text
-https://dev-machine-mcp.<your-subdomain>.workers.dev/admin
-https://dev-machine-mcp.<your-subdomain>.workers.dev/mcp
-```
-
-Open `/admin` on the deployed Worker and save the provider credentials there too. Local KV and deployed KV are separate unless configured otherwise.
-
-## 6. Connect An MCP Client
-
-Use the deployed MCP endpoint:
-
-```text
-https://dev-machine-mcp.<your-subdomain>.workers.dev/mcp
-```
-
-The OAuth endpoints are:
-
-```text
-/authorize
-/token
-/register
-```
-
-When prompted to authorize, Cloudflare Access should authenticate `jverre@gmail.com`. If not using Access, use `MCP_ADMIN_TOKEN`.
-
-## 7. Create A Dev Machine
-
-Call:
-
-```text
-devmachine_create
-```
-
-Useful arguments:
-
-```json
-{
-  "name": "devbox",
-  "region": "lon1",
-  "size": "s-4vcpu-16gb",
-  "image": "ubuntu-24-04-x64",
-  "ref": "main"
+"vars": {
+  "TEAM_DOMAIN": "https://<your-team-name>.cloudflareaccess.com",
+  "POLICY_AUD": "<the-AUD-tag-from-the-Access-application>",
+  "ALLOWED_EMAIL": "jverre@gmail.com"
 }
 ```
 
-Then connect through Tailscale:
+Find the team domain under **Zero Trust** > **Settings** > **Team name and domain**.
+
+These values are identifiers, not secrets. The Worker validates every Access JWT's signature, issuer, audience, and email.
+
+## 4. Deploy
 
 ```bash
-ssh jacques@devbox
+cd mcp-server
+npm run typecheck
+npm run deploy
 ```
 
-## Tools
+The MCP endpoint is:
 
 ```text
-devmachine_status
-devmachine_list
-devmachine_create
-devmachine_start
-devmachine_stop
-devmachine_power_off
-devmachine_suspend
-devmachine_destroy
-devmachine_connection_info
-devmachine_render_cloud_init
+https://dev-machine-mcp.jverre.workers.dev/mcp
 ```
 
-## Troubleshooting
-
-Check configured secrets:
-
-```text
-devmachine_status
-```
-
-If `/admin` says `CONFIG_ENCRYPTION_KEY` is missing, run:
+## 5. Test OAuth and MCP
 
 ```bash
-npx wrangler secret put CONFIG_ENCRYPTION_KEY
+npx @modelcontextprotocol/inspector@latest
 ```
 
-If OAuth state/token storage fails, confirm `OAUTH_KV` is bound in `wrangler.jsonc`.
+Open the Inspector URL printed by the command, select **Streamable HTTP**, enter the MCP endpoint, and connect. Cloudflare Access will open the OAuth login flow. Sign in as `jverre@gmail.com`, list the tools, and call `devmachine_ping`.
 
-Never commit real tokens, auth keys, private SSH keys, or `.env` files.
+Expected result:
+
+```json
+{
+  "ok": true,
+  "authenticatedAs": "jverre@gmail.com"
+}
+```
+
+Requests that do not pass Cloudflare Access, use the wrong Access application, or authenticate as another email are rejected.

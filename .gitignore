@@ -1,27 +1,6 @@
 .DS_Store
 .env
 .env.*
-!.env.example
-
-# Local state
-tmp/
-work/
-.cache/
-
-# Terraform / OpenTofu state, if added later
-.terraform/
-*.tfstate
-*.tfstate.*
-*.tfvars
-crash.log
-override.tf
-override.tf.json
-*_override.tf
-*_override.tf.json
-
-# Editor
-.idea/
-.vscode/settings.json
-
-# JavaScript
+.dev.vars
+.wrangler/
 node_modules/

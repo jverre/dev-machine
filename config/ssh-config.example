@@ -1,6 +1,0 @@
-Host devbox
-  HostName devbox
-  User jacques
-  ForwardAgent yes
-  ServerAliveInterval 30
-  ServerAliveCountMax 3
