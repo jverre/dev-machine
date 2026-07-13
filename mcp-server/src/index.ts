@@ -174,6 +174,12 @@ async function runTool<T extends object>(
   try {
     return toolResult(await operation());
   } catch (error) {
+    if (
+      !(error instanceof DevMachineError) &&
+      !(error instanceof DigitalOceanApiError)
+    ) {
+      console.error("Unexpected dev machine operation error", error);
+    }
     return {
       isError: true,
       content: [

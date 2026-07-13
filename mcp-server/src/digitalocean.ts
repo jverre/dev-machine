@@ -52,10 +52,7 @@ export class DigitalOceanApiError extends Error {
 }
 
 export class DigitalOceanClient implements DigitalOceanApi {
-  constructor(
-    private readonly token: string,
-    private readonly fetcher: typeof fetch = fetch
-  ) {}
+  constructor(private readonly token: string) {}
 
   async listDropletsByTag(tag: string): Promise<DigitalOceanDroplet[]> {
     const query = new URLSearchParams({
@@ -104,7 +101,7 @@ export class DigitalOceanClient implements DigitalOceanApi {
   }
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
-    const response = await this.fetcher(
+    const response = await fetch(
       new URL(path, DIGITALOCEAN_API_URL),
       {
         ...init,
