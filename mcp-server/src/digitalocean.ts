@@ -23,6 +23,18 @@ export interface DigitalOceanAction {
   type: string;
 }
 
+export interface DigitalOceanSnapshot {
+  id: string;
+  name: string;
+  created_at: string;
+  min_disk_size: number;
+  size_gigabytes: number;
+  resource_id: string;
+  resource_type: string;
+  regions: string[];
+  tags: string[];
+}
+
 export interface CreateDropletInput {
   name: string;
   region: string;
@@ -36,11 +48,16 @@ export interface CreateDropletInput {
 
 export interface DigitalOceanApi {
   listDropletsByTag(tag: string): Promise<DigitalOceanDroplet[]>;
+  getDroplet(id: number): Promise<DigitalOceanDroplet>;
   createDroplet(input: CreateDropletInput): Promise<DigitalOceanDroplet>;
   startDroplet(id: number): Promise<DigitalOceanAction>;
   shutdownDroplet(id: number): Promise<DigitalOceanAction>;
+  snapshotDroplet(id: number, name: string): Promise<DigitalOceanAction>;
+  getDropletAction(id: number, actionId: number): Promise<DigitalOceanAction>;
   resizeDroplet(id: number, size: string): Promise<DigitalOceanAction>;
   deleteDroplet(id: number): Promise<void>;
+  listDropletSnapshots(): Promise<DigitalOceanSnapshot[]>;
+  deleteSnapshot(id: string): Promise<void>;
 }
 
 export class DigitalOceanApiError extends Error {
@@ -65,6 +82,13 @@ export class DigitalOceanClient implements DigitalOceanApi {
       `droplets?${query}`
     );
     return response.droplets;
+  }
+
+  async getDroplet(id: number): Promise<DigitalOceanDroplet> {
+    const response = await this.request<{ droplet: DigitalOceanDroplet }>(
+      `droplets/${id}`
+    );
+    return response.droplet;
   }
 
   async createDroplet(
@@ -99,8 +123,52 @@ export class DigitalOceanClient implements DigitalOceanApi {
     return this.initiateDropletAction(id, { type: "shutdown" });
   }
 
+  async snapshotDroplet(
+    id: number,
+    name: string
+  ): Promise<DigitalOceanAction> {
+    return this.initiateDropletAction(id, { type: "snapshot", name });
+  }
+
+  async getDropletAction(
+    id: number,
+    actionId: number
+  ): Promise<DigitalOceanAction> {
+    const response = await this.request<{ action: DigitalOceanAction }>(
+      `droplets/${id}/actions/${actionId}`
+    );
+    return response.action;
+  }
+
   async deleteDroplet(id: number): Promise<void> {
-    await this.request<void>(`droplets/${id}`, { method: "DELETE" });
+    try {
+      await this.request<void>(`droplets/${id}`, { method: "DELETE" });
+    } catch (error) {
+      if (!(error instanceof DigitalOceanApiError) || error.status !== 404) {
+        throw error;
+      }
+    }
+  }
+
+  async listDropletSnapshots(): Promise<DigitalOceanSnapshot[]> {
+    const query = new URLSearchParams({
+      resource_type: "droplet",
+      per_page: "200"
+    });
+    const response = await this.request<{ snapshots: DigitalOceanSnapshot[] }>(
+      `snapshots?${query}`
+    );
+    return response.snapshots;
+  }
+
+  async deleteSnapshot(id: string): Promise<void> {
+    try {
+      await this.request<void>(`snapshots/${id}`, { method: "DELETE" });
+    } catch (error) {
+      if (!(error instanceof DigitalOceanApiError) || error.status !== 404) {
+        throw error;
+      }
+    }
   }
 
   private async initiateDropletAction(

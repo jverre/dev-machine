@@ -37,6 +37,9 @@ droplet:read
 droplet:update
 droplet:delete
 image:read
+image:delete
+snapshot:read
+snapshot:delete
 ssh_key:read
 tag:create
 tag:read
@@ -53,6 +56,7 @@ Image: ubuntu-24-04-x64
 Default size: s-2vcpu-4gb
 Allowed sizes: s-2vcpu-4gb, s-4vcpu-8gb, s-8vcpu-16gb
 Tag: dev-machine-primary
+Snapshot prefix: dev-machine-hibernate-
 SSH key: d3:ef:7e:b1:7a:49:03:d3:df:68:d6:37:f3:41:71:fc
 ```
 

@@ -4,7 +4,7 @@ The MCP server manages exactly one DigitalOcean Droplet. It finds the machine us
 
 ## Check status
 
-Call `devmachine_status` without arguments. It reports whether the machine exists and, when present, its ID, name, power status, size, region, and public IPv4 address.
+Call `devmachine_status` without arguments. Its lifecycle is one of `running`, `off`, `hibernating`, `hibernated`, or `absent`. When a Droplet exists it also reports its ID, power status, size, region, and public IPv4 address. A hibernated machine reports its retained snapshot instead.
 
 ## Create
 
@@ -20,11 +20,23 @@ When `size` is omitted, the configured default is used. If the machine already e
 
 ## Start
 
-Call `devmachine_start` without arguments. If the machine is off, the tool submits a DigitalOcean `power_on` action. If it is already active or still being created, no change is made.
+Call `devmachine_start` without arguments. If the machine is off, the tool submits a DigitalOcean `power_on` action. If the machine is hibernated, it creates a new Droplet from the latest managed snapshot at its previous size. The snapshot is retained until the next successful hibernation.
 
 ## Stop
 
 Call `devmachine_stop` without arguments. If the machine is active, the tool requests a graceful DigitalOcean `shutdown`. It does not fall back to a hard power-off. If the machine is already off, no change is made.
+
+## Hibernate
+
+Call `devmachine_hibernate` without arguments. A Cloudflare Workflow performs these steps in order:
+
+1. Gracefully shut down the Droplet and wait until it is off.
+2. Create a disk snapshot and wait for DigitalOcean to complete it.
+3. Verify that the snapshot is visible.
+4. Delete the Droplet.
+5. Delete older snapshots managed by this server.
+
+If shutdown or snapshot verification fails, the Droplet is not deleted. Hibernation preserves the machine's disk, not its RAM or running processes. Call `devmachine_status` to follow the operation and `devmachine_start` to restore it.
 
 ## Resize
 

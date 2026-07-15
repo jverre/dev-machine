@@ -6,12 +6,15 @@ import { z } from "zod";
 import {
   DevMachineError,
   DevMachineService,
+  type MachineStatusResult,
   parseDevMachineConfig
 } from "./dev-machine";
 import {
   DigitalOceanApiError,
   DigitalOceanClient
 } from "./digitalocean";
+
+export { DevMachineHibernateWorkflow } from "./hibernate-workflow";
 
 interface AccessIdentity {
   email: string;
@@ -33,6 +36,18 @@ const ActionSchema = z.object({
   type: z.string()
 });
 
+const SnapshotSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  createdAt: z.string(),
+  sizeGigabytes: z.number()
+});
+
+const WorkflowOperationSchema = z.object({
+  id: z.string(),
+  status: z.string()
+});
+
 function createServer(identity: AccessIdentity, env: Env) {
   const config = parseDevMachineConfig(env);
   const service = new DevMachineService(
@@ -44,7 +59,7 @@ function createServer(identity: AccessIdentity, env: Env) {
   );
   const server = new McpServer({
     name: "dev-machine",
-    version: "0.3.0"
+    version: "0.4.0"
   });
 
   server.registerTool(
@@ -75,10 +90,19 @@ function createServer(identity: AccessIdentity, env: Env) {
     {
       title: "Get dev machine status",
       description:
-        "Get the existence, power status, size, region, and public IP of the single managed dev machine.",
+        "Get the lifecycle, power status, size, region, public IP, and hibernation snapshot of the single managed dev machine.",
       outputSchema: z.object({
         exists: z.boolean(),
-        machine: MachineSchema.optional()
+        lifecycle: z.enum([
+          "running",
+          "off",
+          "hibernating",
+          "hibernated",
+          "absent"
+        ]),
+        machine: MachineSchema.optional(),
+        snapshot: SnapshotSchema.optional(),
+        operation: WorkflowOperationSchema.optional()
       }),
       annotations: {
         readOnlyHint: true,
@@ -87,7 +111,7 @@ function createServer(identity: AccessIdentity, env: Env) {
         openWorldHint: true
       }
     },
-    async () => runTool("status", () => service.status())
+    async () => runTool("status", () => statusWithWorkflow(service, env))
   );
 
   server.registerTool(
@@ -120,7 +144,7 @@ function createServer(identity: AccessIdentity, env: Env) {
     {
       title: "Start dev machine",
       description:
-        "Power on the managed dev machine, or return it unchanged if it is already active or starting.",
+        "Power on the managed dev machine, or recreate it from its latest hibernation snapshot when no Droplet exists.",
       outputSchema: z.object({
         changed: z.boolean(),
         machine: MachineSchema,
@@ -155,6 +179,28 @@ function createServer(identity: AccessIdentity, env: Env) {
       }
     },
     async () => runTool("stop", () => service.stop())
+  );
+
+  server.registerTool(
+    "devmachine_hibernate",
+    {
+      title: "Hibernate dev machine",
+      description:
+        "Gracefully stop the dev machine, snapshot its disk, verify the snapshot, and delete the Droplet. Running processes and RAM are not preserved.",
+      outputSchema: z.object({
+        changed: z.boolean(),
+        lifecycle: z.literal("hibernating"),
+        operation: WorkflowOperationSchema
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: true
+      }
+    },
+    async () =>
+      runTool("hibernate", () => beginHibernate(service, env))
   );
 
   server.registerTool(
@@ -208,6 +254,109 @@ function createServer(identity: AccessIdentity, env: Env) {
   );
 
   return server;
+}
+
+async function statusWithWorkflow(
+  service: DevMachineService,
+  env: Env
+): Promise<
+  Omit<MachineStatusResult, "lifecycle"> & {
+    lifecycle: MachineStatusResult["lifecycle"] | "hibernating";
+    operation?: { id: string; status: string };
+  }
+> {
+  const result = await service.status();
+  if (!result.machine) {
+    return result;
+  }
+
+  const id = hibernateOperationId(result.machine.id);
+  try {
+    const instance = await env.DEV_MACHINE_HIBERNATE.get(id);
+    const operation = await instance.status();
+    const inProgress = [
+      "queued",
+      "running",
+      "paused",
+      "waiting",
+      "waitingForPause"
+    ].includes(operation.status);
+    return {
+      ...result,
+      ...(inProgress ? { lifecycle: "hibernating" as const } : {}),
+      operation: { id, status: operation.status }
+    };
+  } catch (error) {
+    if (!isMissingWorkflowError(error)) {
+      console.error("Failed to read hibernation workflow status", {
+        operation: "status",
+        workflowId: id,
+        error
+      });
+    }
+    return result;
+  }
+}
+
+async function beginHibernate(
+  service: DevMachineService,
+  env: Env
+): Promise<{
+  changed: boolean;
+  lifecycle: "hibernating";
+  operation: { id: string; status: string };
+}> {
+  const params = await service.prepareHibernate();
+  const id = hibernateOperationId(params.dropletId);
+
+  try {
+    const instance = await env.DEV_MACHINE_HIBERNATE.create({
+      id,
+      params,
+      retention: {
+        successRetention: "1 day",
+        errorRetention: "3 days"
+      }
+    });
+    const status = await instance.status();
+    return {
+      changed: true,
+      lifecycle: "hibernating",
+      operation: { id, status: status.status }
+    };
+  } catch (createError) {
+    try {
+      const instance = await env.DEV_MACHINE_HIBERNATE.get(id);
+      const status = await instance.status();
+      if (status.status === "errored" || status.status === "terminated") {
+        await instance.restart();
+        return {
+          changed: true,
+          lifecycle: "hibernating",
+          operation: { id, status: "queued" }
+        };
+      }
+
+      return {
+        changed: false,
+        lifecycle: "hibernating",
+        operation: { id, status: status.status }
+      };
+    } catch {
+      throw createError;
+    }
+  }
+}
+
+function hibernateOperationId(dropletId: number): string {
+  return `hibernate-${dropletId}`;
+}
+
+function isMissingWorkflowError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    /not found|does not exist|no instance/i.test(error.message)
+  );
 }
 
 async function runTool<T extends object>(

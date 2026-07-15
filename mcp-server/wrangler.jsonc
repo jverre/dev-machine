@@ -13,6 +13,13 @@
   "observability": {
     "enabled": true
   },
+  "workflows": [
+    {
+      "name": "dev-machine-hibernate",
+      "binding": "DEV_MACHINE_HIBERNATE",
+      "class_name": "DevMachineHibernateWorkflow"
+    }
+  ],
   "secrets": {
     "required": ["DIGITALOCEAN_TOKEN"]
   },
@@ -26,6 +33,7 @@
     "DEV_MACHINE_DEFAULT_SIZE": "s-2vcpu-4gb",
     "DEV_MACHINE_ALLOWED_SIZES": "s-2vcpu-4gb,s-4vcpu-8gb,s-8vcpu-16gb",
     "DEV_MACHINE_SSH_KEY": "d3:ef:7e:b1:7a:49:03:d3:df:68:d6:37:f3:41:71:fc",
-    "DEV_MACHINE_TAG": "dev-machine-primary"
+    "DEV_MACHINE_TAG": "dev-machine-primary",
+    "DEV_MACHINE_SNAPSHOT_PREFIX": "dev-machine-hibernate-"
   }
 }

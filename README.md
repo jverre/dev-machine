@@ -5,10 +5,11 @@ A remote MCP server running on Cloudflare Workers and protected by Cloudflare Ac
 The server manages one DigitalOcean dev machine and exposes these tools:
 
 - `devmachine_ping`: verifies the MCP connection and returns the authenticated email address.
-- `devmachine_status`: returns the machine's current state and public IP address.
+- `devmachine_status`: returns the machine's lifecycle and current state.
 - `devmachine_create`: creates the machine if it does not already exist.
-- `devmachine_start`: powers on the machine.
+- `devmachine_start`: powers on or restores the machine.
 - `devmachine_stop`: requests a graceful shutdown.
+- `devmachine_hibernate`: snapshots the machine and removes its Droplet.
 - `devmachine_resize`: changes its CPU and RAM without expanding its disk.
 - `devmachine_delete`: permanently deletes the machine.
 

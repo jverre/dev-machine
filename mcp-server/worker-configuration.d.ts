@@ -10,4 +10,10 @@ interface Env {
   DEV_MACHINE_ALLOWED_SIZES: string;
   DEV_MACHINE_SSH_KEY: string;
   DEV_MACHINE_TAG: string;
+  DEV_MACHINE_SNAPSHOT_PREFIX: string;
+  DEV_MACHINE_HIBERNATE: Workflow<{
+    dropletId: number;
+    snapshotName: string;
+    snapshotPrefix: string;
+  }>;
 }

@@ -2,7 +2,8 @@ import type {
   CreateDropletInput,
   DigitalOceanAction,
   DigitalOceanApi,
-  DigitalOceanDroplet
+  DigitalOceanDroplet,
+  DigitalOceanSnapshot
 } from "./digitalocean";
 
 export interface DevMachineConfig {
@@ -13,6 +14,7 @@ export interface DevMachineConfig {
   allowedSizes: string[];
   sshKey: string;
   tag: string;
+  snapshotPrefix: string;
 }
 
 export interface Machine {
@@ -26,7 +28,22 @@ export interface Machine {
 
 export interface MachineStatusResult {
   exists: boolean;
+  lifecycle: "running" | "off" | "hibernated" | "absent";
   machine?: Machine;
+  snapshot?: MachineSnapshot;
+}
+
+export interface MachineSnapshot {
+  id: string;
+  name: string;
+  createdAt: string;
+  sizeGigabytes: number;
+}
+
+export interface MachineHibernateRequest {
+  dropletId: number;
+  snapshotName: string;
+  snapshotPrefix: string;
 }
 
 export interface MachineCreateResult {
@@ -72,10 +89,29 @@ export class DevMachineService {
   }
 
   async status(): Promise<MachineStatusResult> {
-    const droplet = await this.resolveDroplet();
-    return droplet
-      ? { exists: true, machine: toMachine(droplet) }
-      : { exists: false };
+    const [droplet, snapshots] = await Promise.all([
+      this.resolveDroplet(),
+      this.listManagedSnapshots()
+    ]);
+    if (droplet) {
+      return {
+        exists: true,
+        lifecycle:
+          droplet.status === "active" || droplet.status === "new"
+            ? "running"
+            : "off",
+        machine: toMachine(droplet)
+      };
+    }
+
+    const snapshot = snapshots[0];
+    return snapshot
+      ? {
+          exists: false,
+          lifecycle: "hibernated",
+          snapshot: toMachineSnapshot(snapshot)
+        }
+      : { exists: false, lifecycle: "absent" };
   }
 
   async create(size = this.config.defaultSize): Promise<MachineCreateResult> {
@@ -86,17 +122,15 @@ export class DevMachineService {
       return { changed: false, machine: toMachine(existing) };
     }
 
-    const input: CreateDropletInput = {
-      name: this.config.name,
-      region: this.config.region,
-      size,
-      image: this.config.image,
-      ssh_keys: [this.config.sshKey],
-      tags: [this.config.tag],
-      monitoring: true,
-      ipv6: true
-    };
-    const droplet = await this.api.createDroplet(input);
+    if ((await this.listManagedSnapshots()).length > 0) {
+      throw new DevMachineError(
+        "The dev machine is hibernated. Start it to restore the latest snapshot."
+      );
+    }
+
+    const droplet = await this.api.createDroplet(
+      this.createDropletInput(size, this.config.image)
+    );
     return { changed: true, machine: toMachine(droplet) };
   }
 
@@ -114,7 +148,21 @@ export class DevMachineService {
   }
 
   async start(): Promise<MachinePowerResult> {
-    const droplet = await this.requireDroplet();
+    const droplet = await this.resolveDroplet();
+    if (!droplet) {
+      const snapshot = (await this.listManagedSnapshots())[0];
+      if (!snapshot) {
+        throw new DevMachineError(
+          "The dev machine does not exist. Create it first."
+        );
+      }
+
+      const restored = await this.api.createDroplet(
+        this.createDropletInput(this.snapshotSize(snapshot), snapshot.id)
+      );
+      return { changed: true, machine: toMachine(restored) };
+    }
+
     const machine = toMachine(droplet);
     if (droplet.status === "active" || droplet.status === "new") {
       return { changed: false, machine };
@@ -143,6 +191,25 @@ export class DevMachineService {
 
     const action = await this.api.shutdownDroplet(droplet.id);
     return { changed: true, machine, action };
+  }
+
+  async prepareHibernate(): Promise<MachineHibernateRequest> {
+    const droplet = await this.requireDroplet();
+    if (droplet.status !== "active" && droplet.status !== "off") {
+      throw new DevMachineError(
+        `Cannot hibernate the dev machine while its status is ${droplet.status}.`
+      );
+    }
+
+    const timestamp = new Date()
+      .toISOString()
+      .replace(/[-:.]/g, "")
+      .replace("000Z", "Z");
+    return {
+      dropletId: droplet.id,
+      snapshotName: `${this.config.snapshotPrefix}${droplet.size_slug}--${timestamp}`,
+      snapshotPrefix: this.config.snapshotPrefix
+    };
   }
 
   async delete(confirm: boolean): Promise<MachineDeleteResult> {
@@ -180,6 +247,40 @@ export class DevMachineService {
     return droplets[0];
   }
 
+  private async listManagedSnapshots(): Promise<DigitalOceanSnapshot[]> {
+    const snapshots = await this.api.listDropletSnapshots();
+    return snapshots
+      .filter((snapshot) =>
+        snapshot.name.startsWith(this.config.snapshotPrefix)
+      )
+      .sort(
+        (left, right) =>
+          Date.parse(right.created_at) - Date.parse(left.created_at)
+      );
+  }
+
+  private snapshotSize(snapshot: DigitalOceanSnapshot): string {
+    const encodedSize = snapshot.name
+      .slice(this.config.snapshotPrefix.length)
+      .split("--", 1)[0];
+    return this.config.allowedSizes.includes(encodedSize)
+      ? encodedSize
+      : this.config.defaultSize;
+  }
+
+  private createDropletInput(size: string, image: string): CreateDropletInput {
+    return {
+      name: this.config.name,
+      region: this.config.region,
+      size,
+      image,
+      ssh_keys: [this.config.sshKey],
+      tags: [this.config.tag],
+      monitoring: true,
+      ipv6: true
+    };
+  }
+
   private assertAllowedSize(size: string): void {
     if (!this.config.allowedSizes.includes(size)) {
       throw new DevMachineError(
@@ -205,7 +306,8 @@ export function parseDevMachineConfig(env: Env): DevMachineConfig {
     defaultSize: env.DEV_MACHINE_DEFAULT_SIZE,
     allowedSizes,
     sshKey: env.DEV_MACHINE_SSH_KEY,
-    tag: env.DEV_MACHINE_TAG
+    tag: env.DEV_MACHINE_TAG,
+    snapshotPrefix: env.DEV_MACHINE_SNAPSHOT_PREFIX
   };
 }
 
@@ -220,5 +322,14 @@ function toMachine(droplet: DigitalOceanDroplet): Machine {
     size: droplet.size_slug,
     region: droplet.region.slug,
     ipv4: publicNetwork?.ip_address ?? null
+  };
+}
+
+function toMachineSnapshot(snapshot: DigitalOceanSnapshot): MachineSnapshot {
+  return {
+    id: snapshot.id,
+    name: snapshot.name,
+    createdAt: snapshot.created_at,
+    sizeGigabytes: snapshot.size_gigabytes
   };
 }
