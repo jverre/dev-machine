@@ -1,71 +1,76 @@
 # Deployment
 
-## Requirements
+## 1. Prerequisites
 
-- Node.js and npm
-- A Cloudflare account with the `jacquesverre.com` zone
-- Wrangler authenticated with that Cloudflare account
-- A DigitalOcean account containing the configured SSH key
+You need:
 
-## Install dependencies
+- a Cloudflare account with Workers Paid enabled
+- the `jacquesverre.com` zone in that account
+- Docker running locally
+- Node.js and pnpm
+- Wrangler authenticated with `pnpm wrangler login`
 
-```bash
-cd mcp-server
-npm install
-```
-
-## Configure Cloudflare Access
-
-In Cloudflare Zero Trust:
-
-1. Go to **Access controls** > **AI controls** > **MCP servers**.
-2. Add an MCP server for `https://mcp.jacquesverre.com/mcp`.
-3. Add an **Allow** policy for the email `jverre@gmail.com`.
-4. Select **One-time PIN** as the identity provider.
-5. Enable **Managed OAuth**.
-6. Enable dynamic client registration, localhost clients, and loopback clients.
-
-The Worker configuration in `mcp-server/wrangler.jsonc` contains the Access team domain, application AUD, allowed email, and custom domain. These values are identifiers rather than secrets.
-
-## Configure DigitalOcean
-
-Create a DigitalOcean personal access token with these custom scopes:
-
-```text
-droplet:create
-droplet:read
-droplet:update
-droplet:delete
-image:read
-image:delete
-snapshot:read
-snapshot:delete
-ssh_key:read
-tag:create
-tag:read
-```
-
-Add the token to the `dev-machine-mcp` Worker as an encrypted secret named `DIGITALOCEAN_TOKEN`. In the Cloudflare dashboard, open **Workers & Pages** > **dev-machine-mcp** > **Settings** > **Variables and Secrets**, then add a **Secret**.
-
-The non-secret machine configuration is tracked in `mcp-server/wrangler.jsonc`:
-
-```text
-Name: dev-machine
-Region: lon1
-Image: ubuntu-24-04-x64
-Default size: s-2vcpu-4gb
-Allowed sizes: s-2vcpu-4gb, s-4vcpu-8gb, s-8vcpu-16gb
-Tag: dev-machine-primary
-Snapshot prefix: dev-machine-hibernate-
-SSH key: d3:ef:7e:b1:7a:49:03:d3:df:68:d6:37:f3:41:71:fc
-```
-
-## Deploy
+Install the project dependencies:
 
 ```bash
-cd mcp-server
-npm run typecheck
-npm run deploy
+cd ~/Documents/Personal/dev-machine
+pnpm install
 ```
 
-The MCP endpoint is `https://mcp.jacquesverre.com/mcp`.
+## 2. Create the R2 bucket
+
+```bash
+pnpm wrangler r2 bucket create dev-machine-backups
+```
+
+In the Cloudflare dashboard, create an R2 API token restricted to read and write access for `dev-machine-backups`. Keep its access key ID and secret access key for step 4.
+
+## 3. Protect the hostname
+
+Before deploying, create a Cloudflare Access self-hosted application:
+
+1. Open **Zero Trust** > **Access** > **Applications**.
+2. Add a **Self-hosted** application for `code.jacquesverre.com`.
+3. Create an **Allow** policy whose selector is **Emails** and value is `jverre@gmail.com`.
+4. Enable the **One-time PIN** identity provider.
+5. Set the session duration you prefer.
+
+The Worker also checks the authenticated email header. Its public `workers.dev` and preview URLs are disabled, so the Access-protected custom hostname is the only public route.
+
+## 4. Deploy and add R2 credentials
+
+```bash
+pnpm typecheck
+pnpm deploy
+```
+
+The first deployment builds and uploads the container image. It can take several minutes.
+
+Now add the R2 credentials to the deployed Worker:
+
+```bash
+pnpm wrangler secret put R2_ACCESS_KEY_ID
+pnpm wrangler secret put R2_SECRET_ACCESS_KEY
+pnpm wrangler secret put CLOUDFLARE_ACCOUNT_ID
+```
+
+The account ID is shown on the Cloudflare dashboard overview. It is not sensitive, but the Sandbox SDK reads it from the Worker environment alongside the R2 credentials. Do not open the dev machine until all three values are configured.
+
+## 5. Pair T3 Code
+
+Open this URL and complete the Access email PIN flow:
+
+```text
+https://code.jacquesverre.com/__dev-machine/pair
+```
+
+The first request creates the container, starts T3 Code, creates a 15-minute one-time pairing link, and redirects your browser to it.
+
+Inside T3 Code, open a terminal and authenticate the coding agents:
+
+```bash
+codex login
+claude auth login
+```
+
+Their credentials and T3 Code state live under `/workspace`, so they are included in each R2 checkpoint.

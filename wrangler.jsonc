@@ -1,0 +1,58 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "dev-machine",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-16",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    {
+      "pattern": "code.jacquesverre.com",
+      "custom_domain": true
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true
+    }
+  },
+  "vars": {
+    "ALLOWED_EMAIL": "jverre@gmail.com",
+    "BACKUP_BUCKET_NAME": "dev-machine-backups",
+    "IDLE_TIMEOUT": "30m",
+    "PUBLIC_URL": "https://code.jacquesverre.com",
+    "T3_PORT": "3773"
+  },
+  "r2_buckets": [
+    {
+      "binding": "BACKUP_BUCKET",
+      "bucket_name": "dev-machine-backups"
+    }
+  ],
+  "containers": [
+    {
+      "class_name": "DevMachine",
+      "image": "./container/Dockerfile",
+      "instance_type": "standard-1",
+      "max_instances": 1,
+      "name": "dev-machine"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "DEV_MACHINE",
+        "class_name": "DevMachine"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["DevMachine"]
+    }
+  ]
+}
